@@ -1,0 +1,2 @@
+# johnny-cache
+distributed dictionary
