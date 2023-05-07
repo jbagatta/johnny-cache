@@ -42,7 +42,7 @@ export class L1Cache<V> {
     }
 
     public setPurgeInterval(purgeIntervalMs: number) {
-        const timeout: ReturnType<typeof setTimeout> = setTimeout(this.purgeExpired, purgeIntervalMs)
+        const timeout: NodeJS.Timeout = setTimeout(this.purgeExpired, purgeIntervalMs)
         timeout.unref()
     }
 
