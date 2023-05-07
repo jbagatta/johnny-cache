@@ -1,2 +1,1 @@
-# johnny-cache
-distributed dictionary
+# Distributed Caching
