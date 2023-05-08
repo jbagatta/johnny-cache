@@ -61,6 +61,42 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
         expect(buildFunc2).not.toHaveBeenCalled()
         results.forEach((r) => expect(r).toBe(firstResult))
     })
+    
+    test("should wait for builds when getting with timeout", async () => {
+        const key = v4()
+        const value = "this is the result of some big expensive process"
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            await sleep(1000)
+            return value
+        })
+
+        const call = cache.buildOrRetrieve(key, buildFunc, 2000)
+
+        const gets = iterator(100).map(async () => cache.get(key, 2000))
+        const results = await Promise.all(gets)
+
+        const result = await call
+        results.forEach((r) => expect(r).toBe(result))
+    })
+
+    test("should not wait for builds when getting without timeout", async () => {
+        const key = v4()
+        const value = "this is the result of some big expensive process"
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            await sleep(1000)
+            return value
+        })
+
+        const call = cache.buildOrRetrieve(key, buildFunc, 2000)
+
+        const gets = iterator(100).map(async () => cache.get(key))
+        const results = await Promise.allSettled(gets)
+
+        await call
+
+        results.forEach((r) => expect(r.status).toBe("rejected"))
+        results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toContain('is not complete'))
+    })
 
     test("should propagate error to all clients waiting for build ID", async () => {
         const key = v4()
@@ -113,6 +149,24 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
 
         const validBuild = await cache.buildOrRetrieve(key, buildFunc2, 100)
         expect(validBuild).toBe("new build result")
+        expect(await cache.status(key)).toBe(KeyStatus.EXISTS)
+    })
+
+    test("should return correct status", async () => {
+        const key = v4()
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            await sleep(1000)
+            return "build result"
+        })
+
+        expect(await cache.status(key)).toBe(KeyStatus.EMPTY)
+
+        const call = cache.buildOrRetrieve(key, buildFunc, 2000)
+
+        expect(await cache.status(key)).toBe(KeyStatus.PENDING)
+
+        await call
+
         expect(await cache.status(key)).toBe(KeyStatus.EXISTS)
     })
 })
