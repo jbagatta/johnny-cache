@@ -2,6 +2,9 @@ import { Redis } from "ioredis"
 import { BuildReservation, DataStore } from "../ports/data-store"
 import { v4 } from "uuid"
 
+const buildIdField = 'buildId'
+const buildResultField = 'buildResult'
+
 export class RedisDataStore implements DataStore {
     constructor(private readonly client: Redis) {}
 
@@ -28,8 +31,8 @@ export class RedisDataStore implements DataStore {
 
         return {
             isNew: false,
-            buildId: result['buildId'],
-            completedBuild: 'build' in result ? JSON.parse(result['build']) as V : null
+            buildId: result[buildIdField],
+            completedBuild: buildResultField in result ? JSON.parse(result[buildResultField]) as V : null
         }
     }
 
@@ -52,22 +55,22 @@ export class RedisDataStore implements DataStore {
     }
 }
 
-export const tryReserveAndReturnExistingBuildLuaScript = " \
-  local isNew = redis.call('HSETNX', KEYS[1], 'buildId', ARGV[1]) \
+export const tryReserveAndReturnExistingBuildLuaScript = ` \
+  local isNew = redis.call('HSETNX', KEYS[1], '${buildIdField}', ARGV[1]) \
   if (isNew == 1) \
       redis.call('EXPIRE', KEYS[1], ARGV[2]) \
       return {ARGV[1], nil} \
   else \
-      local buildKey = redis.call('HGET', KEYS[1], 'buildId') \
-      local buildResult = redis.call('HGET', KEYS[1], 'build') \
+      local buildKey = redis.call('HGET', KEYS[1], '${buildIdField}') \
+      local buildResult = redis.call('HGET', KEYS[1], '${buildResultField}') \
       return {buildKey, result} \
   end \
-"
+`
 
-export const tryUpdateReservationLuaScript = " \
+export const tryUpdateReservationLuaScript = ` \
   const exists = redis.call('EXISTS', KEYS[1]) \
-  if (not exists or redis.call('HGET', KEYS[1], 'buildId') == ARGV[1]) \
-      redis.call('HSET', KEYS[1], 'build' ARGV[2]) \
+  if (not exists or redis.call('HGET', KEYS[1], '${buildIdField}') == ARGV[1]) \
+      redis.call('HSET', KEYS[1], '${buildResultField}' ARGV[2]) \
       if (ARGV[3] == -1) \
           redis.call('PERSIST', KEYS[1]) \
       else \
@@ -76,4 +79,4 @@ export const tryUpdateReservationLuaScript = " \
   else \
       return false \
   end \
-"
+`
