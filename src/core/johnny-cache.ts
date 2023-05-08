@@ -56,22 +56,8 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
                 throw await this.handleError(namespacedKey, buildReservation.buildId, err)
             }
         }
-        else { 
-            let result = buildReservation.completedBuild
-            if (result === null) {
-                await this.waitForBuildCompletion(buildReservation.buildId, timeoutMs) 
-
-                const completedBuild = await this.dataStore.get<V>(namespacedKey)
-                if (!completedBuild?.completedBuild) {
-                    throw new Error(`A timeout occurred waiting for Build ${buildReservation.buildId} to complete`)
-                } 
-                result = completedBuild.completedBuild
-            }
-
-            this.updateExpiry(namespacedKey)
-            this.insertIntoL1Cache(namespacedKey, result)
-                
-            return result
+        else {
+            return await this.handlePendingBuild(namespacedKey, buildReservation.buildId, buildReservation.completedBuild, timeoutMs)
         }
     }
 
@@ -93,19 +79,10 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         if (localValue) { return localValue }
 
         let build = await this.dataStore.get<V>(namespacedKey)
-        if (build && build.completedBuild === null && timeoutMs) {
-            await this.waitForBuildCompletion(build.buildId, timeoutMs) 
-
-            build = await this.dataStore.get<V>(namespacedKey)
-        }
-        if (!build?.completedBuild) {
+        if (build === null) {
             throw new Error(`Key ${key} does not exist in cache ${this.cacheOptions.name}`)
         }
-
-        this.updateExpiry(namespacedKey)
-        this.insertIntoL1Cache(namespacedKey, build.completedBuild)
-            
-        return build.completedBuild
+        return await this.handlePendingBuild(namespacedKey, build.buildId, build.completedBuild, timeoutMs)
     }
 
     public async delete(key: K): Promise<void> {
@@ -150,6 +127,24 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         })
 
         return error
+    }
+
+    private async handlePendingBuild(namespacedKey: string, buildId: string, result: V | null, timeoutMs?: number): Promise<V> {
+        if (result === null && timeoutMs) {
+            await this.waitForBuildCompletion(buildId, timeoutMs) 
+
+            const completedBuild = await this.dataStore.get<V>(namespacedKey)
+
+            result = completedBuild?.completedBuild ?? null
+        }
+        if (result === null) {
+            throw new Error(`A timeout occurred waiting for Build ${buildId} to complete`)
+        } 
+
+        this.updateExpiry(namespacedKey)
+        this.insertIntoL1Cache(namespacedKey, result)
+            
+        return result
     }
 
     private async waitForBuildCompletion(buildId: string, timeoutMs: number): Promise<void> {
