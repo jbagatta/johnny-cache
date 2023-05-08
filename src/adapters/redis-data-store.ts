@@ -57,27 +57,28 @@ export class RedisDataStore implements DataStore {
 
 export const tryReserveAndReturnExistingBuildLuaScript = ` \
   local isNew = redis.call('HSETNX', KEYS[1], '${buildIdField}', ARGV[1]) \
-  if (isNew == 1) \
+  if (isNew == 1) then \
       redis.call('EXPIRE', KEYS[1], ARGV[2]) \
       return {ARGV[1], nil} \
   else \
       local buildKey = redis.call('HGET', KEYS[1], '${buildIdField}') \
       local buildResult = redis.call('HGET', KEYS[1], '${buildResultField}') \
-      return {buildKey, result} \
+      return {buildKey, buildResult} \
   end \
 `
 
 export const tryUpdateReservationLuaScript = ` \
-  const exists = redis.call('EXISTS', KEYS[1]) \
-  if (not exists) \
-      redis.call('HSET', KEYS[1], '${buildIdField}' ARGV[1]) \
+  local exists = redis.call('EXISTS', KEYS[1]) \
+  if (not exists) then \
+      redis.call('HSET', KEYS[1], '${buildIdField}', ARGV[1]) \
   end \
-  if (redis.call('HGET', KEYS[1], '${buildIdField}') == ARGV[1]) \
-      redis.call('HSET', KEYS[1], '${buildResultField}' ARGV[2]) \
-      if (ARGV[3] == -1) \
+  if (redis.call('HGET', KEYS[1], '${buildIdField}') == ARGV[1]) then \
+      redis.call('HSET', KEYS[1], '${buildResultField}', ARGV[2]) \
+      if (ARGV[3] == -1) then \
           redis.call('PERSIST', KEYS[1]) \
       else \
           redis.call('EXPIRE', KEYS[1], ARGV[3]) \
+      end \
       return true \
   else \
       return false \
