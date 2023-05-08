@@ -20,7 +20,7 @@ services:
     ports:
       - '26379:26379'
     environment:
-      - REDIS_MASTER_HOST=redis
+      - REDIS_MASTER_HOST=redis-1
       - REDIS_MASTER_PASSWORD=l0c4lt0k3n
       - REDIS_SENTINEL_PASSWORD=l0c4lt0k3n
     depends_on:
