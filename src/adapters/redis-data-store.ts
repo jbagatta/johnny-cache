@@ -46,7 +46,7 @@ export class RedisDataStore implements DataStore {
 
     async updateExpiry(key: string, expiry?: number): Promise<void> {
         if (expiry) {
-          await this.client.expire(key, expiry / 1000)
+          await this.client.pexpire(key, expiry)
         }
     }
 
@@ -58,7 +58,7 @@ export class RedisDataStore implements DataStore {
 export const tryReserveAndReturnExistingBuildLuaScript = ` \
   local isNew = redis.call('HSETNX', KEYS[1], '${buildIdField}', ARGV[1]) \
   if (isNew == 1) then \
-      redis.call('EXPIRE', KEYS[1], ARGV[2]) \
+      redis.call('PEXPIRE', KEYS[1], ARGV[2]) \
       return {ARGV[1], nil} \
   else \
       local buildKey = redis.call('HGET', KEYS[1], '${buildIdField}') \
@@ -77,7 +77,7 @@ export const tryUpdateReservationLuaScript = ` \
       if (ARGV[3] == -1) then \
           redis.call('PERSIST', KEYS[1]) \
       else \
-          redis.call('EXPIRE', KEYS[1], ARGV[3]) \
+          redis.call('PEXPIRE', KEYS[1], ARGV[3]) \
       end \
       return true \
   else \
