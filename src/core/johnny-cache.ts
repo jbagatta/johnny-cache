@@ -68,9 +68,9 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
             return KeyStatus.EMPTY
         }
 
-        return await build.completedBuild !== null 
-            ? KeyStatus.EXISTS 
-            : KeyStatus.PENDING
+        return await build.completedBuild === null 
+            ? KeyStatus.PENDING 
+            : KeyStatus.EXISTS
     }
 
     public async get(key: K, timeoutMs?: number): Promise<V> {
@@ -82,6 +82,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         if (build === null) {
             throw new Error(`Key ${key} does not exist in cache ${this.cacheOptions.name}`)
         }
+
         return await this.handlePendingBuild(namespacedKey, build.buildId, build.completedBuild, timeoutMs)
     }
 
@@ -101,16 +102,17 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
     private async handleBuild(namespacedKey: string, buildId: string, buildFunc: () => Promise<V>): Promise<V> {
         const value = await buildFunc()
     
-        if (!await this.dataStore.tryUpdateReservation(namespacedKey, buildId, value, this.cacheOptions.expiry?.timeMs)) {
-            throw new Error(`Build ${buildId} is no longer valid`)
+        if (await this.dataStore.tryUpdateReservation(namespacedKey, buildId, value, this.cacheOptions.expiry?.timeMs)) {
+            this.insertIntoL1Cache(namespacedKey, value)
+    
+            await this.messageBroker.publishSignal({
+                signalId: buildId,
+                result: BuildResult.COMPLETED
+            })
         }
-
-        this.insertIntoL1Cache(namespacedKey, value)
-
-        await this.messageBroker.publishSignal({
-            signalId: buildId,
-            result: BuildResult.COMPLETED
-        })
+        else {
+            console.warn(`Reservation expired: build ${buildId} for key ${namespacedKey} will be returned but not cached`)
+        }
     
         return value
     }
@@ -138,7 +140,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
             result = completedBuild?.completedBuild ?? null
         }
         if (result === null) {
-            throw new Error(`A timeout occurred waiting for Build ${buildId} to complete`)
+            throw new Error(`Build ${buildId} is not complete`)
         } 
 
         this.updateExpiry(namespacedKey)
