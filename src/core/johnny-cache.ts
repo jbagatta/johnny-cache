@@ -87,12 +87,17 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
             : KeyStatus.PENDING
     }
 
-    public async get(key: K): Promise<V> {
+    public async get(key: K, timeoutMs?: number): Promise<V> {
         const namespacedKey = this.namespacedKey(key)
         const localValue = this.tryGetFromL1Cache(namespacedKey)
         if (localValue) { return localValue }
 
-        const build = await this.dataStore.get<V>(namespacedKey)
+        let build = await this.dataStore.get<V>(namespacedKey)
+        if (build && build.completedBuild === null && timeoutMs) {
+            await this.waitForBuildCompletion(build.buildId, timeoutMs) 
+
+            build = await this.dataStore.get<V>(namespacedKey)
+        }
         if (!build?.completedBuild) {
             throw new Error(`Key ${key} does not exist in cache ${this.cacheOptions.name}`)
         }

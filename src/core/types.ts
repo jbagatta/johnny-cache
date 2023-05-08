@@ -39,7 +39,7 @@ export interface DistributedDictionary<K, V> {
         timeoutMs: number
     ): Promise<V>
     status(key: K): Promise<KeyStatus>
-    get(key: K): Promise<V>
+    get(key: K, timeoutMs?: number): Promise<V>
     delete(key: K): Promise<void>
     //clear(): Promise<void>
     close(): Promise<void>
