@@ -1,7 +1,7 @@
 export interface BuildCompleteSignal {
     signalId: string
     result: BuildResult
-    error?: Error
+    error?: string
 }
 
 export enum BuildResult {

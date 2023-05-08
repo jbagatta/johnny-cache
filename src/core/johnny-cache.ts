@@ -125,7 +125,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         await this.messageBroker.publishSignal({
             signalId: buildId,
             result: BuildResult.FAILED,
-            error: error
+            error: error.message
         })
 
         return error
@@ -153,7 +153,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         const signal = await this.messageBroker.waitForSignal(buildId, timeoutMs)
 
         if (signal.result === BuildResult.FAILED) {
-            throw signal.error
+            throw new Error(signal.error)
         }
         if (signal.result === BuildResult.TIMEOUT) {
             console.warn(`A timeout occurred waiting for build ${buildId} to complete`)
