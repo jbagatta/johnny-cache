@@ -6,12 +6,12 @@ export class RedisDataStore implements DataStore {
     constructor(private readonly client: Redis) {}
 
     async tryReserve<V>(key: string, reservationExpiryMs: number): Promise<BuildReservation<V>> {
-        const buildKey = v4()
-        const result = await this.client.eval(tryReserveAndReturnExistingBuildLuaScript, 1, key, buildKey, reservationExpiryMs) as string[]
+        const buildId = v4()
+        const result = await this.client.eval(tryReserveAndReturnExistingBuildLuaScript, 1, key, buildId, reservationExpiryMs) as string[]
 
         return {
-            isNew: result[0] === buildKey,
-            buildKey: result[0],
+            isNew: result[0] === buildId,
+            buildId: result[0],
             completedBuild: result[1] ? JSON.parse(result[1]) as V : null
         }
     }
@@ -20,27 +20,30 @@ export class RedisDataStore implements DataStore {
         return await this.client.exists(key) === 1
     }
 
-    async get<V>(key: string): Promise<V | null> {
-        const result = await this.client.get(key)
+    async get<V>(key: string): Promise<BuildReservation<V> | null> {
+        const result = await this.client.hgetall(key)
+        if (Object.keys(result).length === 0) {
+            return null
+        }
 
-        return result ? JSON.parse(result) as V : null
+        return {
+            isNew: false,
+            buildId: result['buildId'],
+            completedBuild: 'build' in result ? JSON.parse(result['build']) as V : null
+        }
     }
 
-    async set<V>(key: string, result: V): Promise<void> {
-        const resultString = JSON.stringify(result)
-        
-        await this.client.set(key, resultString)
+    async tryUpdateReservation<V>(key: string, buildId: string, result: V, expiry?: number | undefined): Promise<boolean> {
+        return await this.client.eval(tryUpdateReservationLuaScript, 1, key, buildId, JSON.stringify(result), expiry ?? -1) as boolean
     }
 
-    async delete(...keys: string[]): Promise<void> {
-        const multi = this.client.multi()
-        keys.forEach((key) => multi.del(key))
-        await multi.exec()
+    async delete(key: string): Promise<void> {
+        await this.client.del(key)
     }
 
-    async updateKeyChainExpiry(key: string, chainedKey: string, expiry?: number): Promise<void> {
+    async updateExpiry(key: string, expiry?: number): Promise<void> {
         if (expiry) {
-          await this.client.eval(keyChainExpiryUpdateLuaScript, 1, key, chainedKey, expiry)
+          await this.client.expire(key, expiry / 1000)
         }
     }
 
@@ -50,27 +53,27 @@ export class RedisDataStore implements DataStore {
 }
 
 export const tryReserveAndReturnExistingBuildLuaScript = " \
-  local isNew = redis.call('SETNX', KEYS[1], ARGV[1]) \
+  local isNew = redis.call('HSETNX', KEYS[1], 'buildId', ARGV[1]) \
   if (isNew == 1) \
       redis.call('EXPIRE', KEYS[1], ARGV[2]) \
       return {ARGV[1], nil} \
   else \
-      local buildKey = redis.call('GET', KEYS[1]) \
-      local buildResult = redis.call('GET', buildKey) \
-      if (not buildResult) \
-          return {buildKey, nil} \
-      else \
-          return {buildKey, result} \
-      end \
+      local buildKey = redis.call('HGET', KEYS[1], 'buildId') \
+      local buildResult = redis.call('HGET', KEYS[1], 'build') \
+      return {buildKey, result} \
   end \
 "
 
-export const keyChainExpiryUpdateLuaScript = " \
-  local buildKey = redis.call('GET', KEYS[1]) \
-  if (not buildKey) or (buildKey ~= ARGV[1]) \
+export const tryUpdateReservationLuaScript = " \
+  const exists = redis.call('EXISTS', KEYS[1]) \
+  if (not exists or redis.call('HGET', KEYS[1], 'buildId') == ARGV[1]) \
+      redis.call('HSET', KEYS[1], 'build' ARGV[2]) \
+      if (ARGV[3] == -1) \
+          redis.call('PERSIST', KEYS[1]) \
+      else \
+          redis.call('EXPIRE', KEYS[1], ARGV[3]) \
+      return true \
+  else \
       return false \
   end \
-  redis.call('EXPIRE', KEYS[1], ARGV[2]) \
-  redis.call('EXPIRE', ARGV[1], ARGV[2]) \
-  return true \
 "
