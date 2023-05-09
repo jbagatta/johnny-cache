@@ -5,8 +5,8 @@
   "scripts": {
     "clean": "rm -r ./build",
     "build": "tsc -b",
-    "test": "jest ./tests/unit/**/*",
-    "test:e2e": "jest ./tests/e2e/*"
+    "test": "jest --silent ./tests/unit/**/*",
+    "test:e2e": "jest --silent ./tests/e2e/*"
   },
   "dependencies": {
     "ioredis": "^5.2.2",

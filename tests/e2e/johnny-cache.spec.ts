@@ -4,7 +4,7 @@ import { NatsConnectionOptions, RedisConnectionOptions } from '../../src/factory
 import { DistributedCacheFactory } from '../../src/factory/distributed-dictionary-factory'
 import { v4 } from 'uuid'
 
-describe("Distributed Dictionary: buildOrRetrieve()", () => {
+describe("Distributed Dictionary", () => {
     let cache: DistributedDictionary<string, string>
 
     beforeEach(async () => {
@@ -112,6 +112,28 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
         expect(buildFunc).toHaveBeenCalledTimes(1)
         results.forEach((r) => expect(r.status).toBe("rejected"))
         results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toBe(err.message))
+    })
+
+    test("should remove key and allow immediate rebuild after delete", async () => {
+        const key = v4()
+        const value = "this is the result of some big expensive process"
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            await sleep(1000)
+            return value
+        })
+
+        await cache.buildOrRetrieve(key, buildFunc, 2000)
+
+        const newBuilds = iterator(200).map(async () => cache.buildOrRetrieve(key, buildFunc, 2000))
+        await cache.delete(key)
+        const newBuilds2 = iterator(200).map(async () => cache.buildOrRetrieve(key, buildFunc, 2000))
+
+        const results = await Promise.all(newBuilds)
+        const results2 = await Promise.all(newBuilds2)
+
+        expect(buildFunc).toHaveBeenCalledTimes(2)
+        results.forEach((r) => expect(r).toBe(value))
+        results2.forEach((r) => expect(r).toBe(value))
     })
 
     test("should error with timeout when buildFunc runs long", async () => {
