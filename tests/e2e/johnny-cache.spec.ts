@@ -98,6 +98,12 @@ describe("Distributed Dictionary", () => {
         results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toContain('is not complete'))
     })
 
+    test("should error immediately when getting nonexistent key", async () => {
+        const key = v4()
+
+        await expect(async () => cache.get(key)).rejects.toThrow(`Key ${key} does not exist in cache test-cache`)
+    })
+
     test("should propagate error to all clients waiting for build ID", async () => {
         const key = v4()
         const err = new Error("this is an error")
