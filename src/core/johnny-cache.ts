@@ -1,7 +1,6 @@
 import NodeCache from "node-cache"
 import { DataStore } from "../ports/data-store"
 import { BuildResult, MessageBroker } from "../ports/message-broker"
-import { L1Cache } from "./l1-cache"
 import { CacheOptions, DistributedDictionary, ExpiryType, KeyStatus } from "./types"
 
 export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
