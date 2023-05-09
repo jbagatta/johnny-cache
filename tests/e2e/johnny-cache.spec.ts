@@ -197,6 +197,38 @@ describe("Distributed Dictionary", () => {
 
         expect(await cache.status(key)).toBe(KeyStatus.EXISTS)
     })
+
+    test("should call callback with result on success", async () => {
+        const key = v4()
+        const value = "this is the result of some big expensive process"
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            return value
+        })
+        const success = jest.fn()
+        const failure = jest.fn()
+
+        cache.asyncBuildOrRetrieve(key, buildFunc, 1000, success, failure)
+
+        await sleep(100)
+
+        expect(success).toHaveBeenCalled()
+    })
+
+    test("should call error on error", async () => {
+        const key = v4()
+        const value = "this is the result of some big expensive process"
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            throw new Error()
+        })
+        const success = jest.fn()
+        const failure = jest.fn()
+
+        cache.asyncBuildOrRetrieve(key, buildFunc, 1000, success, failure)
+
+        await sleep(100)
+
+        expect(failure).toHaveBeenCalled()
+    })
 })
 
 async function newCache<K, V>() {
