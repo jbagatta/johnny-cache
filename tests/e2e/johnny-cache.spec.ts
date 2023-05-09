@@ -33,12 +33,12 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
             edgeCaseBuilds[i] = cache.buildOrRetrieve(key, buildFunc, 200)
         }
 
-        const results1 = await Promise.all(builds)
-        const results2 = await Promise.all(edgeCaseBuilds)
+        const results = await Promise.all(builds)
+        const edgeCaseResults = await Promise.all(edgeCaseBuilds)
 
         expect(buildFunc).toHaveBeenCalledTimes(1)
-        results1.forEach((r) => expect(r).toBe(value))
-        results2.forEach((r) => expect(r).toBe(value))
+        results.forEach((r) => expect(r).toBe(value))
+        edgeCaseResults.forEach((r) => expect(r).toBe(value))
     })
     
     test("should retrieve existing once built", async () => {
@@ -82,14 +82,26 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
     test("should allow immediate rebuild after error", async () => {
         const key = v4()
 
-        const fails = iterator(1).map(async () => cache.buildOrRetrieve(key, () => Promise.reject(new Error('failure')), 2000))
-        const failResults = await Promise.allSettled(fails)
+        const builds = iterator(100).map(async (i) => {
+            await sleep(i)
+            return await cache.buildOrRetrieve(key, () => {
+                if (i % 2 === 0) {
+                    return Promise.reject(new Error('failure'))
+                }
+                else {
+                    return Promise.resolve('success')
+                }
+            }, 2000)
+        })
+        const results = await Promise.allSettled(builds)
 
-        const successes = iterator(100).map(async () => cache.buildOrRetrieve(key, () => Promise.resolve('success'), 2000))
-        const successResults = await Promise.allSettled(successes)
+        const fails = results.filter(({status}) => status === 'rejected')
+        expect(fails.length).toBeGreaterThan(0)
+        fails.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toBe("failure"))
 
-        failResults.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toBe("failure"))
-        successResults.forEach((r) => expect((r as PromiseFulfilledResult<string>).value).toBe("success"))
+        const successes = results.filter(({status}) => status === 'fulfilled')
+        expect(successes.length).toBeGreaterThan(0)
+        successes.forEach((r) => expect((r as PromiseFulfilledResult<string>).value).toBe("success"))
     })
 
     test("should error with timeout when buildFunc runs long", async () => {
