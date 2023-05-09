@@ -1,3 +1,4 @@
+import NodeCache from "node-cache"
 import { DataStore } from "../ports/data-store"
 import { BuildResult, MessageBroker } from "../ports/message-broker"
 import { L1Cache } from "./l1-cache"
@@ -8,14 +9,11 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         private readonly dataStore: DataStore,
         private readonly messageBroker: MessageBroker,
         private readonly cacheOptions: CacheOptions,
-        private readonly l1Cache: L1Cache<V> = new L1Cache<V>()
+        private readonly l1Cache: NodeCache 
+            = new NodeCache({ checkperiod: cacheOptions.l1CacheOptions?.purgeIntervalMs })
     ) { 
-        if (this.cacheOptions.l1CacheOptions?.enabled && this.cacheOptions.l1CacheOptions?.purgeIntervalMs) {
-            this.l1Cache.setPurgeInterval(this.cacheOptions.l1CacheOptions.purgeIntervalMs)
-        }
-
         this.messageBroker.onKeyDeleted(this.cacheOptions.name, (key: string) => {
-            const handleDelete = () => this.l1Cache.delete(key)
+            const handleDelete = () => this.l1Cache.del(key)
             handleDelete.bind(this)
             handleDelete()
         })
@@ -89,7 +87,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
     public async delete(key: K): Promise<void> {
         const namespacedKey = this.namespacedKey(key)
 
-        this.l1Cache.delete(namespacedKey)
+        this.l1Cache.del(namespacedKey)
         this.messageBroker.publishKeyDeleted(this.cacheOptions.name, namespacedKey as string)
         await this.dataStore.delete(namespacedKey)
     }
@@ -162,12 +160,17 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
 
     private insertIntoL1Cache(key: string, value: V): void {
         if (this.cacheOptions.l1CacheOptions?.enabled) {
-            this.l1Cache.set(key, value, this.cacheOptions.expiry)
+            if (this.cacheOptions.expiry) {
+                this.l1Cache.set(key, value, this.cacheOptions.expiry.timeMs)
+            }
+            else {
+                this.l1Cache.set(key, value)
+            }
         }
     }
 
     private tryGetFromL1Cache(namespacedKey: string): V | null {
-        const localValue = this.l1Cache.get(namespacedKey)
+        const localValue = this.l1Cache.get<V>(namespacedKey)
         if (!localValue) { return null }
 
         this.updateExpiry(namespacedKey)
