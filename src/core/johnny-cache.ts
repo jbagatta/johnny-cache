@@ -87,8 +87,8 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         const namespacedKey = this.namespacedKey(key)
 
         this.l1Cache.del(namespacedKey)
-        this.messageBroker.publishKeyDeleted(this.cacheOptions.name, namespacedKey as string)
         await this.dataStore.delete(namespacedKey)
+        this.messageBroker.publishKeyDeleted(this.cacheOptions.name, namespacedKey as string)
     }
 
     public async close(): Promise<void> {
@@ -136,8 +136,8 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
 
             result = completedBuild?.completedBuild ?? null
         }
-        if (result === null) {
-            throw new Error(`Build ${buildId} is not complete`)
+        if (!result) {
+            throw new Error(`Build ${buildId} is not complete, or ${namespacedKey} was deleted`)
         } 
 
         this.updateExpiry(namespacedKey)

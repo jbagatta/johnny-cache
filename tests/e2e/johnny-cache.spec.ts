@@ -27,10 +27,11 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
 
         await sleep(850)
 
-        const edgeCaseBuilds = iterator(200).map(async () =>  {
+        const edgeCaseBuilds = new Array<Promise<string>>(200)
+        for (let i=0; i<200; i++) {
             await sleep(1)
-            return cache.buildOrRetrieve(key, buildFunc, 2000)
-        })
+            edgeCaseBuilds[i] = cache.buildOrRetrieve(key, buildFunc, 200)
+        }
 
         const results1 = await Promise.all(builds)
         const results2 = await Promise.all(edgeCaseBuilds)
@@ -76,6 +77,19 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
         expect(buildFunc).toHaveBeenCalledTimes(1)
         results.forEach((r) => expect(r.status).toBe("rejected"))
         results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toBe(err.message))
+    })
+
+    test("should allow immediate rebuild after error", async () => {
+        const key = v4()
+
+        const fails = iterator(1).map(async () => cache.buildOrRetrieve(key, () => Promise.reject(new Error('failure')), 2000))
+        const failResults = await Promise.allSettled(fails)
+
+        const successes = iterator(100).map(async () => cache.buildOrRetrieve(key, () => Promise.resolve('success'), 2000))
+        const successResults = await Promise.allSettled(successes)
+
+        failResults.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toBe("failure"))
+        successResults.forEach((r) => expect((r as PromiseFulfilledResult<string>).value).toBe("success"))
     })
 
     test("should error with timeout when buildFunc runs long", async () => {
@@ -211,7 +225,7 @@ describe("Distributed Dictionary: get()", () => {
     test("should error immediately when getting nonexistent key", async () => {
         const key = v4()
 
-        await expect(async () => cache.get(key)).rejects.toThrow(`Key ${key} does not exist in cache test-cache`)
+        await expect(async () => cache.get(key, 1000)).rejects.toThrow(`Key ${key} does not exist in cache test-cache`)
     })
 })
 
@@ -266,16 +280,16 @@ describe("Distributed Dictionary: delete()", () => {
 
         await cache.buildOrRetrieve(key, buildFunc, 2000)
 
-        const newBuilds = iterator(200).map(async () => cache.buildOrRetrieve(key, buildFunc, 2000))
-        await cache.delete(key)
-        const newBuilds2 = iterator(200).map(async () => cache.buildOrRetrieve(key, buildFunc, 2000))
-
-        const results = await Promise.all(newBuilds)
-        const results2 = await Promise.all(newBuilds2)
+        const builds = iterator(100).map(async (i) => {
+            if (i === 50) {
+                await cache.delete(key)
+            }
+            return await cache.buildOrRetrieve(key, buildFunc, 2000)
+        })
+        const results = await Promise.all(builds)
 
         expect(buildFunc).toHaveBeenCalledTimes(2)
         results.forEach((r) => expect(r).toBe(value))
-        results2.forEach((r) => expect(r).toBe(value))
     })
 })
 
