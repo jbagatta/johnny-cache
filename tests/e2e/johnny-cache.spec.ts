@@ -4,7 +4,7 @@ import { NatsConnectionOptions, RedisConnectionOptions } from '../../src/factory
 import { DistributedCacheFactory } from '../../src/factory/distributed-dictionary-factory'
 import { v4 } from 'uuid'
 
-describe("Distributed Dictionary", () => {
+describe("Distributed Dictionary: buildOrRetrieve()", () => {
     let cache: DistributedDictionary<string, string>
 
     beforeEach(async () => {
@@ -61,7 +61,117 @@ describe("Distributed Dictionary", () => {
         expect(buildFunc2).not.toHaveBeenCalled()
         results.forEach((r) => expect(r).toBe(firstResult))
     })
-    
+
+    test("should propagate error to all clients waiting for build ID", async () => {
+        const key = v4()
+        const err = new Error("this is an error")
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            await sleep(1000)
+            throw err
+        })
+
+        const builds = iterator(100).map(async () => cache.buildOrRetrieve(key, buildFunc, 2000))
+        const results = await Promise.allSettled(builds)
+
+        expect(buildFunc).toHaveBeenCalledTimes(1)
+        results.forEach((r) => expect(r.status).toBe("rejected"))
+        results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toBe(err.message))
+    })
+
+    test("should error with timeout when buildFunc runs long", async () => {
+        const key = v4()
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            await sleep(3000)
+            return ""
+        })
+
+        const firstResult = cache.buildOrRetrieve(key, buildFunc, 3000)
+
+        const builds = iterator(100).map(async () => cache.buildOrRetrieve(key, buildFunc, 10))
+        const results = await Promise.allSettled(builds)
+
+        await firstResult
+
+        results.forEach((r) => expect(r.status).toBe("rejected"))
+        results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toContain("is not complete"))
+    })
+
+    test("should not cache a build that times out", async () => {
+        const key = v4()
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            await sleep(1000)
+            return "build result"
+        })
+
+        const invalidBuild = await cache.buildOrRetrieve(key, buildFunc, 100)
+        expect(invalidBuild).toBe("build result")
+        expect(await cache.status(key)).toBe(KeyStatus.EMPTY)
+
+        const buildFunc2 = jest.fn().mockImplementation(async () => {
+            return "new build result"
+        })
+
+        const validBuild = await cache.buildOrRetrieve(key, buildFunc2, 100)
+        expect(validBuild).toBe("new build result")
+        expect(await cache.status(key)).toBe(KeyStatus.EXISTS)
+    })
+})
+
+describe("Distributed Dictionary: asyncBuildOrRetrieve()", () => {
+    let cache: DistributedDictionary<string, string>
+
+    beforeEach(async () => {
+        cache = await newCache<string, string>()
+    })
+
+    afterEach(async () => {
+        await cache?.close()
+    })
+
+    test("should call callback with result on success", async () => {
+        const key = v4()
+        const value = "this is the result of some big expensive process"
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            return value
+        })
+        const success = jest.fn()
+        const failure = jest.fn()
+
+        cache.asyncBuildOrRetrieve(key, buildFunc, 1000, success, failure)
+
+        await sleep(100)
+
+        expect(success).toHaveBeenCalled()
+    })
+
+    test("should call error on error", async () => {
+        const key = v4()
+        const value = "this is the result of some big expensive process"
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            throw new Error()
+        })
+        const success = jest.fn()
+        const failure = jest.fn()
+
+        cache.asyncBuildOrRetrieve(key, buildFunc, 1000, success, failure)
+
+        await sleep(100)
+
+        expect(failure).toHaveBeenCalled()
+    })
+})
+
+describe("Distributed Dictionary: get()", () => {
+    let cache: DistributedDictionary<string, string>
+
+    beforeEach(async () => {
+        cache = await newCache<string, string>()
+    })
+
+    afterEach(async () => {
+        await cache?.close()
+    })
+
     test("should wait for builds when getting with timeout", async () => {
         const key = v4()
         const value = "this is the result of some big expensive process"
@@ -103,21 +213,47 @@ describe("Distributed Dictionary", () => {
 
         await expect(async () => cache.get(key)).rejects.toThrow(`Key ${key} does not exist in cache test-cache`)
     })
+})
 
-    test("should propagate error to all clients waiting for build ID", async () => {
+describe("Distributed Dictionary: status()", () => {
+    let cache: DistributedDictionary<string, string>
+
+    beforeEach(async () => {
+        cache = await newCache<string, string>()
+    })
+
+    afterEach(async () => {
+        await cache?.close()
+    })
+
+    test("should return correct status", async () => {
         const key = v4()
-        const err = new Error("this is an error")
         const buildFunc = jest.fn().mockImplementation(async () => {
             await sleep(1000)
-            throw err
+            return "build result"
         })
 
-        const builds = iterator(100).map(async () => cache.buildOrRetrieve(key, buildFunc, 2000))
-        const results = await Promise.allSettled(builds)
+        expect(await cache.status(key)).toBe(KeyStatus.EMPTY)
 
-        expect(buildFunc).toHaveBeenCalledTimes(1)
-        results.forEach((r) => expect(r.status).toBe("rejected"))
-        results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toBe(err.message))
+        const call = cache.buildOrRetrieve(key, buildFunc, 2000)
+
+        expect(await cache.status(key)).toBe(KeyStatus.PENDING)
+
+        await call
+
+        expect(await cache.status(key)).toBe(KeyStatus.EXISTS)
+    })
+})
+
+describe("Distributed Dictionary: delete()", () => {
+    let cache: DistributedDictionary<string, string>
+
+    beforeEach(async () => {
+        cache = await newCache<string, string>()
+    })
+
+    afterEach(async () => {
+        await cache?.close()
     })
 
     test("should remove key and allow immediate rebuild after delete", async () => {
@@ -140,94 +276,6 @@ describe("Distributed Dictionary", () => {
         expect(buildFunc).toHaveBeenCalledTimes(2)
         results.forEach((r) => expect(r).toBe(value))
         results2.forEach((r) => expect(r).toBe(value))
-    })
-
-    test("should error with timeout when buildFunc runs long", async () => {
-        const key = v4()
-        const buildFunc = jest.fn().mockImplementation(async () => {
-            await sleep(3000)
-            return ""
-        })
-
-        const firstResult = cache.buildOrRetrieve(key, buildFunc, 3000)
-
-        const builds = iterator(100).map(async () => cache.buildOrRetrieve(key, buildFunc, 10))
-        const results = await Promise.allSettled(builds)
-
-        await firstResult
-
-        results.forEach((r) => expect(r.status).toBe("rejected"))
-        results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toContain("is not complete"))
-    })
-
-    test("should not cache a build that times out", async () => {
-        const key = v4()
-        const buildFunc = jest.fn().mockImplementation(async () => {
-            await sleep(1000)
-            return "build result"
-        })
-
-        const invalidBuild = await cache.buildOrRetrieve(key, buildFunc, 100)
-        expect(invalidBuild).toBe("build result")
-        expect(await cache.status(key)).toBe(KeyStatus.EMPTY)
-
-        const buildFunc2 = jest.fn().mockImplementation(async () => {
-            return "new build result"
-        })
-
-        const validBuild = await cache.buildOrRetrieve(key, buildFunc2, 100)
-        expect(validBuild).toBe("new build result")
-        expect(await cache.status(key)).toBe(KeyStatus.EXISTS)
-    })
-
-    test("should return correct status", async () => {
-        const key = v4()
-        const buildFunc = jest.fn().mockImplementation(async () => {
-            await sleep(1000)
-            return "build result"
-        })
-
-        expect(await cache.status(key)).toBe(KeyStatus.EMPTY)
-
-        const call = cache.buildOrRetrieve(key, buildFunc, 2000)
-
-        expect(await cache.status(key)).toBe(KeyStatus.PENDING)
-
-        await call
-
-        expect(await cache.status(key)).toBe(KeyStatus.EXISTS)
-    })
-
-    test("should call callback with result on success", async () => {
-        const key = v4()
-        const value = "this is the result of some big expensive process"
-        const buildFunc = jest.fn().mockImplementation(async () => {
-            return value
-        })
-        const success = jest.fn()
-        const failure = jest.fn()
-
-        cache.asyncBuildOrRetrieve(key, buildFunc, 1000, success, failure)
-
-        await sleep(100)
-
-        expect(success).toHaveBeenCalled()
-    })
-
-    test("should call error on error", async () => {
-        const key = v4()
-        const value = "this is the result of some big expensive process"
-        const buildFunc = jest.fn().mockImplementation(async () => {
-            throw new Error()
-        })
-        const success = jest.fn()
-        const failure = jest.fn()
-
-        cache.asyncBuildOrRetrieve(key, buildFunc, 1000, success, failure)
-
-        await sleep(100)
-
-        expect(failure).toHaveBeenCalled()
     })
 })
 
