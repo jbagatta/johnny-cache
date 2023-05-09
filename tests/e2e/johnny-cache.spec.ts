@@ -56,7 +56,7 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
         const buildFunc2 = jest.fn().mockImplementation(async () => {
             return "wrong value"
         })
-        const builds = iterator(100).map(async () => cache.buildOrRetrieve(key, buildFunc2, 2000))
+        const builds = iterator(100).map(async () => cache.buildOrRetrieve(key, buildFunc2, 1))
         const results = await Promise.all(builds)
 
         expect(buildFunc2).not.toHaveBeenCalled()
@@ -85,7 +85,7 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
         const builds = iterator(100).map(async (i) => {
             await sleep(i)
             return await cache.buildOrRetrieve(key, () => {
-                if (i % 2 === 0) {
+                if (i < 50) {
                     return Promise.reject(new Error('failure'))
                 }
                 else {
@@ -96,11 +96,11 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
         const results = await Promise.allSettled(builds)
 
         const fails = results.filter(({status}) => status === 'rejected')
-        expect(fails.length).toBeGreaterThan(0)
+        expect(fails.length).toBeGreaterThan(1)
         fails.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toBe("failure"))
 
         const successes = results.filter(({status}) => status === 'fulfilled')
-        expect(successes.length).toBeGreaterThan(0)
+        expect(successes.length).toBeGreaterThan(1)
         successes.forEach((r) => expect((r as PromiseFulfilledResult<string>).value).toBe("success"))
     })
 
@@ -258,16 +258,16 @@ describe("Distributed Dictionary: status()", () => {
             await sleep(1000)
             return "build result"
         })
-
         expect(await cache.status(key)).toBe(KeyStatus.EMPTY)
 
         const call = cache.buildOrRetrieve(key, buildFunc, 2000)
-
         expect(await cache.status(key)).toBe(KeyStatus.PENDING)
 
         await call
-
         expect(await cache.status(key)).toBe(KeyStatus.EXISTS)
+
+        await cache.delete(key)
+        expect(await cache.status(key)).toBe(KeyStatus.EMPTY)
     })
 })
 
