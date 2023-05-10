@@ -69,7 +69,7 @@ export const tryReserveAndReturnExistingBuildLuaScript = ` \
 
 export const tryUpdateReservationLuaScript = ` \
   local exists = redis.call('EXISTS', KEYS[1]) \
-  if (not exists) then \
+  if (exists == 0) then \
       redis.call('HSET', KEYS[1], '${buildIdField}', ARGV[1]) \
   end \
   if (redis.call('HGET', KEYS[1], '${buildIdField}') == ARGV[1]) then \

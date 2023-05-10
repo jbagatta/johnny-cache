@@ -125,19 +125,20 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
     test("should not cache a build that times out", async () => {
         const key = v4()
         const buildFunc = jest.fn().mockImplementation(async () => {
-            await sleep(1000)
+            await sleep(2000)
             return "build result"
         })
+        const invalidBuild = cache.buildOrRetrieve(key, buildFunc, 100)
 
-        const invalidBuild = await cache.buildOrRetrieve(key, buildFunc, 100)
-        expect(invalidBuild).toBe("build result")
+        await sleep(500)
         expect(await cache.status(key)).toBe(KeyStatus.EMPTY)
 
         const buildFunc2 = jest.fn().mockImplementation(async () => {
             return "new build result"
         })
-
         const validBuild = await cache.buildOrRetrieve(key, buildFunc2, 100)
+
+        expect(await invalidBuild).toBe("build result")
         expect(validBuild).toBe("new build result")
         expect(await cache.status(key)).toBe(KeyStatus.EXISTS)
     })
