@@ -41,7 +41,7 @@ export class JetstreamMessageBroker implements MessageBroker {
         await this.client.jetstream().publish(subject, StringCodec().encode(JSON.stringify(signal)))
     }
 
-    publishKeyDeleted(namespace: string, key: string): void {
+    async publishKeyDeleted(namespace: string, key: string): Promise<void> {
         const subject = `${keyDeletePrefix}.${namespace}.${key}`
 
         this.client.publish(subject, StringCodec().encode(key))

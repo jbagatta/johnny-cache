@@ -88,7 +88,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
 
         this.l1Cache.del(namespacedKey)
         await this.dataStore.delete(namespacedKey)
-        this.messageBroker.publishKeyDeleted(this.cacheOptions.name, namespacedKey as string)
+        await this.messageBroker.publishKeyDeleted(this.cacheOptions.name, namespacedKey as string)
     }
 
     public async close(): Promise<void> {
