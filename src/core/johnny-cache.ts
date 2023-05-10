@@ -9,7 +9,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         private readonly messageBroker: MessageBroker,
         private readonly cacheOptions: CacheOptions,
         private readonly l1Cache: NodeCache 
-            = new NodeCache({ checkperiod: cacheOptions.l1CacheOptions?.purgeIntervalMs })
+            = new NodeCache({ checkperiod: cacheOptions.l1CacheOptions?.purgeIntervalSeconds })
     ) { 
         this.messageBroker.onKeyDeleted(this.cacheOptions.name, (key: string) => {
             const handleDelete = () => this.l1Cache.del(key)

@@ -1,14 +1,12 @@
-import { DistributedDictionary, ExpiryType, KeyStatus } from '../../src/core/types'
-import { CacheOptions } from '../../src/core/types'
-import { NatsConnectionOptions, RedisConnectionOptions } from '../../src/factory/types'
-import { DistributedDictionaryFactory } from '../../src/factory/distributed-dictionary-factory'
+import { DistributedDictionary, KeyStatus } from '../../src/core/types'
 import { v4 } from 'uuid'
+import { createTestCache, iterator, sleep } from './util'
 
 describe("Distributed Dictionary: buildOrRetrieve()", () => {
     let cache: DistributedDictionary<string, string>
 
     beforeEach(async () => {
-        cache = await newCache<string, string>()
+        cache = await createTestCache<string, string>()
     })
 
     afterEach(async () => {
@@ -148,7 +146,7 @@ describe("Distributed Dictionary: asyncBuildOrRetrieve()", () => {
     let cache: DistributedDictionary<string, string>
 
     beforeEach(async () => {
-        cache = await newCache<string, string>()
+        cache = await createTestCache<string, string>()
     })
 
     afterEach(async () => {
@@ -192,7 +190,7 @@ describe("Distributed Dictionary: get()", () => {
     let cache: DistributedDictionary<string, string>
 
     beforeEach(async () => {
-        cache = await newCache<string, string>()
+        cache = await createTestCache<string, string>()
     })
 
     afterEach(async () => {
@@ -246,7 +244,7 @@ describe("Distributed Dictionary: status()", () => {
     let cache: DistributedDictionary<string, string>
 
     beforeEach(async () => {
-        cache = await newCache<string, string>()
+        cache = await createTestCache<string, string>()
     })
 
     afterEach(async () => {
@@ -276,7 +274,7 @@ describe("Distributed Dictionary: delete()", () => {
     let cache: DistributedDictionary<string, string>
 
     beforeEach(async () => {
-        cache = await newCache<string, string>()
+        cache = await createTestCache<string, string>()
     })
 
     afterEach(async () => {
@@ -305,40 +303,3 @@ describe("Distributed Dictionary: delete()", () => {
         results.forEach((r) => expect(r).toBe(value))
     })
 })
-
-async function newCache<K, V>() {
-    const natsConnectOptions: NatsConnectionOptions = {
-        urls: ["nats://localhost:4222"],
-        token: "l0c4lt0k3n"
-    }
-    const redisConnectionOptions: RedisConnectionOptions = {
-        sentinel: {
-            url: "localhost",
-            port: 26379,
-            primaryName: "mymaster",
-        },
-        password: "l0c4lt0k3n"
-    }
-    const options: CacheOptions = {
-        name: "test-cache",
-        expiry: {
-          type: ExpiryType.SLIDING,
-          timeMs: 60*1000
-        },
-        l1CacheOptions: {
-          enabled: true,
-          purgeIntervalMs: 10*60*1000
-        }
-    }
-    return await DistributedDictionaryFactory.create<K, V>(natsConnectOptions, redisConnectionOptions, options)
-}
-
-async function sleep(ms: number) {
-    return new Promise((res) => {
-        setTimeout(res, ms)
-    })
-}
-
-function iterator(num: number) {
-    return Array.from(Array(num).keys())
-}

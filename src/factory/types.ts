@@ -10,7 +10,13 @@ export interface RedisConnectionOptions {
     password?: string
 }
 
+export interface NatsUserPass {
+    user: string
+    pass: string
+}
+
 export interface NatsConnectionOptions {
     urls: string[]
     token?: string
+    userPass?: NatsUserPass
 }

@@ -16,7 +16,7 @@ export interface Expiry {
 
 export interface L1CacheOptions {
     enabled: boolean
-    purgeIntervalMs?: number
+    purgeIntervalSeconds?: number
 }
 
 export interface CacheOptions {
