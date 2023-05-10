@@ -38,16 +38,19 @@ export class DistributedDictionaryFactory {
         })
 
         const jsm = await natsClient.jetstreamManager()
-        await jsm.streams.add({
-            name: "jc",
-            retention: RetentionPolicy.Limits,
-            storage: StorageType.Memory,
-            discard: DiscardPolicy.Old,
-            max_age: nanos(30*1000),
-            subjects: ["jc.builds.*", "jc.events.*"]
-        })
+        const existingStream = (await jsm.streams.names().next()).find((s) => s === natsConnectionOptions.stream)
+        if (!existingStream) {
+            await jsm.streams.add({
+                name: natsConnectionOptions.stream,
+                retention: RetentionPolicy.Limits,
+                storage: StorageType.Memory,
+                discard: DiscardPolicy.Old,
+                max_age: nanos(30*1000),
+                subjects: ["jc.builds.*", "jc.events.*"]
+            })
+        }
         
-        return new JetstreamMessageBroker(natsClient, "jc")
+        return new JetstreamMessageBroker(natsClient, natsConnectionOptions.stream)
     }
 
     private static createRedisDataStore(redisConnectionOptions: RedisConnectionOptions): RedisDataStore {

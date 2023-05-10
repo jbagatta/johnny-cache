@@ -7,7 +7,8 @@ import NodeCache from 'node-cache'
 export async function createTestCache<K, V>(expirySeconds = 60, l1Cache?: NodeCache) {
     const natsConnectOptions: NatsConnectionOptions = {
         urls: ["nats://localhost:4222"],
-        token: "l0c4lt0k3n"
+        token: "l0c4lt0k3n",
+        stream: "jc"
     }
     const redisConnectionOptions: RedisConnectionOptions = {
         sentinel: {

@@ -18,5 +18,6 @@ export interface NatsUserPass {
 export interface NatsConnectionOptions {
     urls: string[]
     token?: string
-    userPass?: NatsUserPass
+    userPass?: NatsUserPass,
+    stream: string
 }
