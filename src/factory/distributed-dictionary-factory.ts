@@ -9,8 +9,6 @@ import NodeCache from "node-cache";
 import { DataStore } from "../ports/data-store";
 import { MessageBroker } from "../ports/message-broker";
 
-// createLocalCache() - local store adapters
-
 export class DistributedDictionaryFactory {
     public static async createCustom<K, V>(
         dataStore: DataStore,
