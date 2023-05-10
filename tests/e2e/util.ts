@@ -2,8 +2,9 @@ import { ExpiryType } from '../../src/core/types'
 import { CacheOptions } from '../../src/core/types'
 import { NatsConnectionOptions, RedisConnectionOptions } from '../../src/factory/types'
 import { DistributedDictionaryFactory } from '../../src/factory/distributed-dictionary-factory'
+import NodeCache from 'node-cache'
 
-export async function createTestCache<K, V>(l1Enabled = false, expirySeconds = 60) {
+export async function createTestCache<K, V>(expirySeconds = 60, l1Cache?: NodeCache) {
     const natsConnectOptions: NatsConnectionOptions = {
         urls: ["nats://localhost:4222"],
         token: "l0c4lt0k3n"
@@ -24,12 +25,12 @@ export async function createTestCache<K, V>(l1Enabled = false, expirySeconds = 6
           timeMs: expirySeconds * 1000
         },
         l1CacheOptions: {
-          enabled: l1Enabled,
-          purgeIntervalSeconds: l1Enabled ? 10 * expirySeconds : undefined
+          enabled: l1Cache ? true : false,
+          purgeIntervalSeconds: l1Cache ? 10 * expirySeconds : undefined
         }
     }
 
-    return await DistributedDictionaryFactory.create<K, V>(natsConnectOptions, redisConnectionOptions, options)
+    return await DistributedDictionaryFactory.create<K, V>(natsConnectOptions, redisConnectionOptions, options, l1Cache)
 }
 
 export async function sleep(ms: number) {
