@@ -145,17 +145,17 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
         const key = v4()
 
         const buildFunc = jest.fn().mockImplementation(async () => {
-            await sleep(2000)
+            await sleep(1000)
             return "build result"
         })
         const invalidBuild = cache.buildOrRetrieve(key, buildFunc, 100)
 
-        await sleep(500)
+        await sleep(850)
         
         const buildFunc2 = jest.fn().mockImplementation(async () => {
             return "new build result"
         })
-        const builds = iterator(100).map(async (i) => {
+        const builds = iterator(200).map(async (i) => {
             await sleep(i)
             return await cache.buildOrRetrieve(key, buildFunc2, 100)
         })
