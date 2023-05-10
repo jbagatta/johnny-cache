@@ -1,6 +1,7 @@
+import { RedisConnectionOptions } from '../../src/adapters/data-stores/redis-data-store'
+import { NatsConnectionOptions } from '../../src/adapters/message-brokers/jetstream-message-broker'
 import { ExpiryType } from '../../src/core/types'
 import { CacheOptions } from '../../src/core/types'
-import { NatsConnectionOptions, RedisConnectionOptions } from '../../src/factory/types'
 import { DistributedDictionaryFactory } from '../../src/factory/distributed-dictionary-factory'
 import NodeCache from 'node-cache'
 

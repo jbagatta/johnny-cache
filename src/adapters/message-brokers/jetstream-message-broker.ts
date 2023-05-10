@@ -1,4 +1,4 @@
-import { AckPolicy, DeliverPolicy, JsMsg, Msg, NatsConnection, NatsError, ReplayPolicy, StringCodec, nanos } from "nats";
+import { AckPolicy, DeliverPolicy, DiscardPolicy, JsMsg, Msg, NatsConnection, NatsError, ReplayPolicy, RetentionPolicy, StorageType, StringCodec, connect, nanos } from "nats";
 import { BuildCompleteSignal, BuildResult, MessageBroker } from "../../ports/message-broker";
 
 const buildSignalPrefix = 'jc.builds'
@@ -61,4 +61,38 @@ export class JetstreamMessageBroker implements MessageBroker {
     async close(): Promise<void> {
         await this.client.close()
     }
+}
+
+export interface NatsConnectionOptions {
+    urls: string[]
+    token?: string
+    userPass?: {
+        user: string
+        pass: string
+    },
+    stream: string
+}
+
+export async function createJetstreamMessageBroker(natsConnectionOptions: NatsConnectionOptions): Promise<JetstreamMessageBroker> {
+    const natsClient = await connect({
+        servers: natsConnectionOptions.urls,
+        token: natsConnectionOptions.token,
+        user: natsConnectionOptions.userPass?.user,
+        pass: natsConnectionOptions.userPass?.pass
+    })
+
+    const jsm = await natsClient.jetstreamManager()
+    const existingStream = (await jsm.streams.names().next()).find((s) => s === natsConnectionOptions.stream)
+    if (!existingStream) {
+        await jsm.streams.add({
+            name: natsConnectionOptions.stream,
+            retention: RetentionPolicy.Limits,
+            storage: StorageType.Memory,
+            discard: DiscardPolicy.Old,
+            max_age: nanos(30*1000),
+            subjects: ["jc.builds.*", "jc.events.*"]
+        })
+    }
+    
+    return new JetstreamMessageBroker(natsClient, natsConnectionOptions.stream)
 }

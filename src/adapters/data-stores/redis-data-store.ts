@@ -1,6 +1,6 @@
 import { Redis } from "ioredis"
-import { BuildReservation, DataStore } from "../../ports/data-store"
 import { v4 } from "uuid"
+import { BuildReservation, DataStore } from "../../ports/data-store"
 
 const buildIdField = 'buildId'
 const buildResultField = 'buildResult'
@@ -84,3 +84,33 @@ export const tryUpdateReservationLuaScript = ` \
       return false \
   end \
 `
+
+export interface RedisConnectionOptions {
+    sentinel?: {
+        url: string
+        port: number,
+        primaryName: string,
+    }, 
+    url?: string
+    password?: string
+}
+
+export function createRedisDataStore(redisConnectionOptions: RedisConnectionOptions): RedisDataStore {
+    let redisClient: Redis
+    if (redisConnectionOptions.sentinel) {
+        redisClient = new Redis({
+            sentinels: [ { host: redisConnectionOptions.sentinel.url, port: redisConnectionOptions.sentinel.port } ],
+            name: redisConnectionOptions.sentinel.primaryName,
+            password: redisConnectionOptions.password,
+            sentinelPassword: redisConnectionOptions.password
+        })
+    }
+    else {
+        redisClient = new Redis({
+            path: redisConnectionOptions.url,
+            password: redisConnectionOptions.password
+        })
+    } 
+    
+    return new RedisDataStore(redisClient)
+}

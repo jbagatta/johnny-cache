@@ -1,13 +1,11 @@
-import { DiscardPolicy, RetentionPolicy, StorageType, connect, nanos } from "nats";
-import { CacheOptions, DistributedDictionary } from "../core/types";
-import { Redis } from "ioredis";
-import { JetstreamMessageBroker } from "../adapters/message-brokers/jetstream-message-broker";
-import { RedisDataStore } from "../adapters/data-stores/redis-data-store";
-import { JohnnyCache } from "../core/johnny-cache";
-import { NatsConnectionOptions, RedisConnectionOptions } from "./types";
+
 import NodeCache from "node-cache";
+import { CacheOptions, DistributedDictionary } from "../core/types";
+import { JohnnyCache } from "../core/johnny-cache";
 import { DataStore } from "../ports/data-store";
 import { MessageBroker } from "../ports/message-broker";
+import { NatsConnectionOptions, createJetstreamMessageBroker } from "../adapters/message-brokers/jetstream-message-broker";
+import { RedisConnectionOptions, createRedisDataStore } from "../adapters/data-stores/redis-data-store";
 
 export class DistributedDictionaryFactory {
     public static async createCustom<K, V>(
@@ -25,51 +23,12 @@ export class DistributedDictionaryFactory {
         cacheOptions: CacheOptions,
         l1Cache?: NodeCache
     ): Promise<DistributedDictionary<K, V>> {
-        const messageBroker = await this.createJetstreamMessageBroker(natsConnectionOptions)
-        const dataStore = this.createRedisDataStore(redisConnectionOptions)
+        const messageBroker = await createJetstreamMessageBroker(natsConnectionOptions)
+        const dataStore = createRedisDataStore(redisConnectionOptions)
 
         return this.createCustom<K, V>(dataStore, messageBroker, cacheOptions, l1Cache)
     }
-
-    private static async createJetstreamMessageBroker(natsConnectionOptions: NatsConnectionOptions): Promise<JetstreamMessageBroker> {
-        const natsClient = await connect({
-            servers: natsConnectionOptions.urls,
-            token: natsConnectionOptions.token
-        })
-
-        const jsm = await natsClient.jetstreamManager()
-        const existingStream = (await jsm.streams.names().next()).find((s) => s === natsConnectionOptions.stream)
-        if (!existingStream) {
-            await jsm.streams.add({
-                name: natsConnectionOptions.stream,
-                retention: RetentionPolicy.Limits,
-                storage: StorageType.Memory,
-                discard: DiscardPolicy.Old,
-                max_age: nanos(30*1000),
-                subjects: ["jc.builds.*", "jc.events.*"]
-            })
-        }
-        
-        return new JetstreamMessageBroker(natsClient, natsConnectionOptions.stream)
-    }
-
-    private static createRedisDataStore(redisConnectionOptions: RedisConnectionOptions): RedisDataStore {
-        let redisClient: Redis
-        if (redisConnectionOptions.sentinel) {
-            redisClient = new Redis({
-                sentinels: [ { host: redisConnectionOptions.sentinel.url, port: redisConnectionOptions.sentinel.port } ],
-                name: redisConnectionOptions.sentinel.primaryName,
-                password: redisConnectionOptions.password,
-                sentinelPassword: redisConnectionOptions.password
-            })
-        }
-        else {
-            redisClient = new Redis({
-                path: redisConnectionOptions.url,
-                password: redisConnectionOptions.password
-            })
-        } 
-        
-        return new RedisDataStore(redisClient)
-    }
 }
+
+
+export {RedisConnectionOptions, NatsConnectionOptions}
