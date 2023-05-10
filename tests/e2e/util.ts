@@ -13,7 +13,7 @@ export async function createTestCache<K, V>(expirySeconds = 60, l1Cache?: NodeCa
     }
     const redisConnectionOptions: RedisConnectionOptions = {
         sentinel: {
-            url: "localhost",
+            host: "localhost",
             port: 26379,
             primaryName: "mymaster",
         },

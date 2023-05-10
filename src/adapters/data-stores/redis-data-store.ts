@@ -87,7 +87,7 @@ export const tryUpdateReservationLuaScript = ` \
 
 export interface RedisConnectionOptions {
     sentinel?: {
-        url: string
+        host: string
         port: number,
         primaryName: string,
     }, 
@@ -99,7 +99,7 @@ export function createRedisDataStore(redisConnectionOptions: RedisConnectionOpti
     let redisClient: Redis
     if (redisConnectionOptions.sentinel) {
         redisClient = new Redis({
-            sentinels: [ { host: redisConnectionOptions.sentinel.url, port: redisConnectionOptions.sentinel.port } ],
+            sentinels: [ { host: redisConnectionOptions.sentinel.host, port: redisConnectionOptions.sentinel.port } ],
             name: redisConnectionOptions.sentinel.primaryName,
             password: redisConnectionOptions.password,
             sentinelPassword: redisConnectionOptions.password
