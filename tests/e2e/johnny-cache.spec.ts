@@ -140,6 +140,30 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
         expect(validBuild).toBe("new build result")
         expect(await cache.status(key)).toBe(KeyStatus.EXISTS)
     })
+
+    test("should allow rebuild after timeout even if build is in progress", async () => {
+        const key = v4()
+
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            await sleep(2000)
+            return "build result"
+        })
+        const invalidBuild = cache.buildOrRetrieve(key, buildFunc, 100)
+
+        await sleep(500)
+        
+        const buildFunc2 = jest.fn().mockImplementation(async () => {
+            return "new build result"
+        })
+        const builds = iterator(100).map(async (i) => {
+            await sleep(i)
+            return await cache.buildOrRetrieve(key, buildFunc2, 100)
+        })
+        const results = await Promise.all(builds)
+
+        expect(await invalidBuild).toBe("build result")
+        results.forEach((r) => expect(r).toBe("new build result"))
+    })
 })
 
 describe("Distributed Dictionary: asyncBuildOrRetrieve()", () => {
