@@ -1,7 +1,7 @@
 import { DistributedDictionary, ExpiryType, KeyStatus } from '../../src/core/types'
 import { CacheOptions } from '../../src/core/types'
 import { NatsConnectionOptions, RedisConnectionOptions } from '../../src/factory/types'
-import { DistributedCacheFactory } from '../../src/factory/distributed-dictionary-factory'
+import { DistributedDictionaryFactory } from '../../src/factory/distributed-dictionary-factory'
 import { v4 } from 'uuid'
 
 describe("Distributed Dictionary: buildOrRetrieve()", () => {
@@ -330,7 +330,7 @@ async function newCache<K, V>() {
           purgeIntervalMs: 10*60*1000
         }
     }
-    return await DistributedCacheFactory.create<K, V>(natsConnectOptions, redisConnectionOptions, options)
+    return await DistributedDictionaryFactory.create<K, V>(natsConnectOptions, redisConnectionOptions, options)
 }
 
 async function sleep(ms: number) {

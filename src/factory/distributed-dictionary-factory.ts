@@ -5,17 +5,19 @@ import { JetstreamMessageBroker } from "../adapters/jetstream-message-broker";
 import { RedisDataStore } from "../adapters/redis-data-store";
 import { JohnnyCache } from "../core/johnny-cache";
 import { NatsConnectionOptions, RedisConnectionOptions } from "./types";
+import NodeCache from "node-cache";
 
-export class DistributedCacheFactory {
+export class DistributedDictionaryFactory {
     public static async create<K, V>(
         natsConnectionOptions: NatsConnectionOptions,
         redisConnectionOptions: RedisConnectionOptions,
-        options: CacheOptions
+        cacheOptions: CacheOptions,
+        l1Cache?: NodeCache
     ): Promise<DistributedDictionary<K, V>> {
         const messageBroker = await this.createJetstreamMessageBroker(natsConnectionOptions)
         const dataStore = this.createRedisDataStore(redisConnectionOptions)
 
-        return new JohnnyCache<K, V>(dataStore, messageBroker, options)
+        return new JohnnyCache<K, V>(dataStore, messageBroker, cacheOptions, l1Cache)
     }
 
     private static async createJetstreamMessageBroker(natsConnectionOptions: NatsConnectionOptions): Promise<JetstreamMessageBroker> {
