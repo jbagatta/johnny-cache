@@ -1,5 +1,5 @@
 import { AckPolicy, DeliverPolicy, JsMsg, Msg, NatsConnection, NatsError, ReplayPolicy, StringCodec, nanos } from "nats";
-import { BuildCompleteSignal, BuildResult, MessageBroker } from "../ports/message-broker";
+import { BuildCompleteSignal, BuildResult, MessageBroker } from "../../ports/message-broker";
 
 const buildSignalPrefix = 'jc.builds'
 const keyDeletePrefix = 'jc.events'

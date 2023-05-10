@@ -1,8 +1,8 @@
 import { DiscardPolicy, RetentionPolicy, StorageType, connect, nanos } from "nats";
 import { CacheOptions, DistributedDictionary } from "../core/types";
 import { Redis } from "ioredis";
-import { JetstreamMessageBroker } from "../adapters/jetstream-message-broker";
-import { RedisDataStore } from "../adapters/redis-data-store";
+import { JetstreamMessageBroker } from "../adapters/message-brokers/jetstream-message-broker";
+import { RedisDataStore } from "../adapters/data-stores/redis-data-store";
 import { JohnnyCache } from "../core/johnny-cache";
 import { NatsConnectionOptions, RedisConnectionOptions } from "./types";
 import NodeCache from "node-cache";

@@ -1,5 +1,5 @@
 import { Redis } from "ioredis"
-import { BuildReservation, DataStore } from "../ports/data-store"
+import { BuildReservation, DataStore } from "../../ports/data-store"
 import { v4 } from "uuid"
 
 const buildIdField = 'buildId'
