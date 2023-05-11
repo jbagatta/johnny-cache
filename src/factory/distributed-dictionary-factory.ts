@@ -17,7 +17,7 @@ export class DistributedDictionaryFactory {
         return new JohnnyCache<K, V>(dataStore, messageBroker, cacheOptions, l1Cache)
     }
 
-    public static async createDistributed<K, V>(
+    public static async create<K, V>(
         redisConnectionOptions: RedisConnectionOptions,  // use | for different stores
         natsConnectionOptions: NatsConnectionOptions,    // use | for different brokers
         cacheOptions: CacheOptions,
