@@ -4,6 +4,8 @@ import { DataStore } from "../ports/data-store"
 import { BuildResult, MessageBroker } from "../ports/message-broker"
 
 export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
+    private l1CacheEnabled = false
+
     constructor(
         private readonly dataStore: DataStore,
         private readonly messageBroker: MessageBroker,
@@ -11,12 +13,19 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         private readonly l1Cache: NodeCache 
             = new NodeCache({ checkperiod: cacheOptions.l1CacheOptions?.purgeIntervalSeconds })
     ) { 
-        this.messageBroker.onKeyDeleted(this.cacheOptions.name, (key: string) => {
-            const handleDelete = () => this.l1Cache.del(key)
-            handleDelete.bind(this)
-            handleDelete()
-        })
-        .then()
+        this.l1CacheEnabled = cacheOptions.l1CacheOptions?.enabled ?? false
+        if (this.l1CacheEnabled) {
+            this.messageBroker.onKeyDeleted(this.cacheOptions.name, (key: string) => {
+                const handleDelete = () => this.l1Cache.del(key)
+                handleDelete.bind(this)
+                handleDelete()
+            })
+            .then(() => console.info("L1 cache enabled"))
+            .catch((err) => {
+                this.l1CacheEnabled = false
+                console.warn(`An error occurred, disabling L1 cache: ${err}`)
+            })
+        }
     }
 
     private namespacedKey = (key: K) => `${this.cacheOptions.name}/${key}`
@@ -159,7 +168,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
     }
 
     private insertIntoL1Cache(key: string, value: V): void {
-        if (this.cacheOptions.l1CacheOptions?.enabled) {
+        if (this.l1CacheEnabled) {
             if (this.cacheOptions.expiry) {
                 this.l1Cache.set(key, value, this.cacheOptions.expiry.timeMs)
             }
