@@ -13,14 +13,15 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         private readonly l1Cache: NodeCache 
             = new NodeCache({ checkperiod: cacheOptions.l1CacheOptions?.purgeIntervalSeconds })
     ) { 
-        this.l1CacheEnabled = cacheOptions.l1CacheOptions?.enabled ?? false
-        if (this.l1CacheEnabled) {
+        if (cacheOptions.l1CacheOptions?.enabled ?? false) {
             this.messageBroker.onKeyDeleted(this.cacheOptions.name, (key: string) => {
                 const handleDelete = () => this.l1Cache.del(key)
                 handleDelete.bind(this)
                 handleDelete()
             })
-            .then(() => console.info("L1 cache enabled"))
+            .then(() => {
+                this.l1CacheEnabled = true
+                console.info("L1 cache enabled")})
             .catch((err) => {
                 this.l1CacheEnabled = false
                 console.warn(`An error occurred, disabling L1 cache: ${err}`)
