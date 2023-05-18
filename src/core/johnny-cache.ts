@@ -16,6 +16,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
             handleDelete.bind(this)
             handleDelete()
         })
+        .then()
     }
 
     private namespacedKey = (key: K) => `${this.cacheOptions.name}/${key}`

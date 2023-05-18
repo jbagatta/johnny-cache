@@ -47,7 +47,7 @@ export class JetstreamMessageBroker implements MessageBroker {
         this.client.publish(subject, StringCodec().encode(key))
     }
     
-    onKeyDeleted(namespace: string, handle: (key: string) => void): void {
+    async onKeyDeleted(namespace: string, handle: (key: string) => void): Promise<void> {
         this.client.subscribe(`${keyDeletePrefix}.${namespace}`, {
             callback: (err: NatsError | null, msg: Msg | null) => {
                 if (!msg) { return }
