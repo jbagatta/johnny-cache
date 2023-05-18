@@ -171,7 +171,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
     private insertIntoL1Cache(key: string, value: V): void {
         if (this.l1CacheEnabled) {
             if (this.cacheOptions.expiry) {
-                this.l1Cache.set(key, value, this.cacheOptions.expiry.timeMs)
+                this.l1Cache.set(key, value, this.cacheOptions.expiry.timeMs * 0.001)
             }
             else {
                 this.l1Cache.set(key, value)
