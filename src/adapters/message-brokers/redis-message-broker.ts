@@ -12,7 +12,7 @@ export class RedisMessageBroker implements MessageBroker {
 
     async waitForSignal(signalId: string, timeoutMs: number): Promise<BuildCompleteSignal> {
         const subject = `${buildSignalPrefix}-${signalId}`
-        
+
         const results = await this.client.duplicate().xread("COUNT", 1, "BLOCK", timeoutMs, "STREAMS", subject, '$')
         if (!results) {
             return {
@@ -28,7 +28,10 @@ export class RedisMessageBroker implements MessageBroker {
     async publishSignal(signal: BuildCompleteSignal): Promise<void> {
         const subject = `${buildSignalPrefix}-${signal.signalId}`
 
-        await this.client.xadd(subject, '*', 'signal', JSON.stringify(signal))
+        await this.client.multi()
+            .xadd(subject, '*', 'signal', JSON.stringify(signal))
+            .expire(subject, 5)
+            .exec()
     }
 
     async publishKeyDeleted(namespace: string, key: string): Promise<void> {
