@@ -13,7 +13,8 @@ export class RedisMessageBroker implements MessageBroker {
     async waitForSignal(signalId: string, timeoutMs: number): Promise<BuildCompleteSignal> {
         const subject = `${buildSignalPrefix}-${signalId}`
 
-        const results = await this.client.duplicate().xread("COUNT", 1, "BLOCK", timeoutMs, "STREAMS", subject, '$')
+        const results = await this.client.duplicate()
+            .xread("COUNT", 1, "BLOCK", timeoutMs, "STREAMS", subject, '$')
         if (!results) {
             return {
                 signalId: signalId,
