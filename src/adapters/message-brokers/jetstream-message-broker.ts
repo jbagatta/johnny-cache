@@ -63,14 +63,14 @@ export class JetstreamMessageBroker implements MessageBroker {
     }
 }
 
-export interface NatsConnectionOptions {
-    urls: string[]
+export class NatsConnectionOptions {
+    urls?: string[]
+    stream?: string
     token?: string
     userPass?: {
         user: string
         pass: string
-    },
-    stream: string
+    }
 }
 
 export async function createJetstreamMessageBroker(natsConnectionOptions: NatsConnectionOptions): Promise<JetstreamMessageBroker> {
@@ -94,5 +94,5 @@ export async function createJetstreamMessageBroker(natsConnectionOptions: NatsCo
         })
     }
     
-    return new JetstreamMessageBroker(natsClient, natsConnectionOptions.stream)
+    return new JetstreamMessageBroker(natsClient, natsConnectionOptions.stream!)
 }

@@ -85,12 +85,12 @@ export const tryUpdateReservationLuaScript = ` \
   end \
 `
 
-export interface RedisConnectionOptions {
+export class RedisConnectionOptions {
     sentinel?: {
         host: string
         port: number,
         primaryName: string,
-    }, 
+    }
     url?: string
     password?: string
 }

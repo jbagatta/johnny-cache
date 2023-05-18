@@ -33,7 +33,7 @@ export async function createTestCache<K, V>(expirySeconds = 60, l1Cache?: NodeCa
     }
 
     return await DistributedDictionaryFactory
-        .create<K, V>(redisConnectionOptions, natsConnectOptions, options, l1Cache)
+        .create<K, V>(redisConnectionOptions, redisConnectionOptions, options, l1Cache)
 }
 
 export async function sleep(ms: number) {
