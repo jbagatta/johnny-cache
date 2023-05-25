@@ -1,6 +1,6 @@
-import { BuildCompleteSignal, BuildResult, MessageBroker } from "../../ports/message-broker";
 import { Redis } from "ioredis";
 import { RedisConnectionOptions } from "../data-stores/redis-data-store";
+import { BuildCompleteSignal, BuildResult, MessageBroker } from "../../ports/message-broker";
 
 const buildSignalPrefix = 'jc-builds'
 const keyDeletePrefix = 'jc-events'
