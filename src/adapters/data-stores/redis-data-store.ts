@@ -96,6 +96,10 @@ export class RedisConnectionOptions {
 }
 
 export function createRedisDataStore(redisConnectionOptions: RedisConnectionOptions): RedisDataStore {
+    if (!redisConnectionOptions.sentinel && !redisConnectionOptions.url) {
+        throw new Error("Missing Redis connection configration (sentinel or url)")
+    }
+
     let redisClient: Redis
     if (redisConnectionOptions.sentinel) {
         redisClient = new Redis({

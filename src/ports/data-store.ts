@@ -1,7 +1,7 @@
 export interface BuildReservation<V> {
-  isNew: boolean
-  buildId: string
-  completedBuild: V | null
+    isNew: boolean
+    buildId: string
+    completedBuild: V | null
 }
 
 export interface DataStore {

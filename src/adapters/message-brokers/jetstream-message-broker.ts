@@ -64,8 +64,8 @@ export class JetstreamMessageBroker implements MessageBroker {
 }
 
 export class NatsConnectionOptions {
-    urls?: string[]
-    stream?: string
+    urls!: string[]
+    stream!: string
     token?: string
     userPass?: {
         user: string

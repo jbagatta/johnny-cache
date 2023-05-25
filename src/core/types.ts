@@ -20,8 +20,8 @@ export interface L1CacheOptions {
 }
 
 export interface CacheOptions {
-    name: string,
-    expiry?: Expiry,
+    name: string
+    expiry?: Expiry
     l1CacheOptions?: L1CacheOptions
 }
 
