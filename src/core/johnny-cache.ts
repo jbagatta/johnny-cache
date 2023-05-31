@@ -155,8 +155,8 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
             throw new Error(`Build ${buildId} is not complete, or ${namespacedKey} was deleted`)
         } 
 
-        this.updateExpiry(namespacedKey)
         this.insertIntoL1Cache(namespacedKey, result)
+        this.updateExpiry(namespacedKey)
             
         return result
     }
@@ -187,14 +187,15 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         const localValue = this.l1Cache.get<V>(namespacedKey)
         if (!localValue) { return null }
 
-        this.insertIntoL1Cache(namespacedKey, localValue)
         this.updateExpiry(namespacedKey)
-        
+
         return localValue
     }
 
     private updateExpiry(namespacedKey: string) {
         if (this.cacheOptions.expiry?.type === ExpiryType.SLIDING) {
+            this.l1Cache.ttl(namespacedKey, this.cacheOptions.expiry.timeMs * 0.001)
+
             this.dataStore.updateExpiry(namespacedKey, this.cacheOptions.expiry?.timeMs)
                 .then(() => {})
                 .catch((err) => {
