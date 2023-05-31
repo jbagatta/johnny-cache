@@ -1,11 +1,11 @@
-import { RedisConnectionOptions } from '../../src/adapters/data-stores/redis-data-store'
-import { NatsConnectionOptions } from '../../src/adapters/message-brokers/jetstream-message-broker'
+import NodeCache from 'node-cache'
 import { ExpiryType } from '../../src/core/types'
 import { CacheOptions } from '../../src/core/types'
+import { RedisConnectionOptions } from '../../src/adapters/data-stores/redis-data-store'
+import { NatsConnectionOptions } from '../../src/adapters/message-brokers/jetstream-message-broker'
 import { DistributedDictionaryFactory } from '../../src/factory/distributed-dictionary-factory'
-import NodeCache from 'node-cache'
 
-export async function createTestCache<K, V>(expirySeconds = 60, l1Cache?: NodeCache) {
+export async function createTestCache<K, V>(l1Cache?: NodeCache, expirySeconds = 60) {
     const natsConnectOptions: NatsConnectionOptions = {
         urls: ["nats://localhost:4222"],
         token: "l0c4lt0k3n",

@@ -1,6 +1,6 @@
-import { DistributedDictionary, KeyStatus } from '../../src/core/types'
 import { v4 } from 'uuid'
 import { createTestCache, iterator, sleep } from './util'
+import { DistributedDictionary, KeyStatus } from '../../src/core/types'
 
 describe("Distributed Dictionary: buildOrRetrieve()", () => {
     let cache: DistributedDictionary<string, string>
