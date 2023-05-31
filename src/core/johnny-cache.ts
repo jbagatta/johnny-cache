@@ -11,7 +11,11 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         private readonly messageBroker: MessageBroker,
         private readonly cacheOptions: CacheOptions,
         private readonly l1Cache: NodeCache 
-            = new NodeCache({ checkperiod: cacheOptions.l1CacheOptions?.purgeIntervalSeconds })
+            = new NodeCache({ 
+                checkperiod: cacheOptions.l1CacheOptions?.purgeIntervalSeconds,
+                errorOnMissing: false,
+                deleteOnExpire: true
+            })
     ) { 
         if (cacheOptions.l1CacheOptions?.enabled ?? false) {
             this.messageBroker.onKeyDeleted(this.cacheOptions.name, (key: string) => {
@@ -183,6 +187,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         const localValue = this.l1Cache.get<V>(namespacedKey)
         if (!localValue) { return null }
 
+        this.insertIntoL1Cache(namespacedKey, localValue)
         this.updateExpiry(namespacedKey)
         
         return localValue
