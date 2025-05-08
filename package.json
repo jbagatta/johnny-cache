@@ -2,6 +2,9 @@
   "name": "johnny-cache",
   "version": "1.0.0",
   "author": "John Bagatta",
+  "description": "A robust distributed dictionary for coordinating and caching expensive operations in a distributed environment",
+  "license": "MIT",
+  "types": "./build/index.d.ts",
   "scripts": {
     "clean": "rm -r ./build",
     "build": "tsc -b",
