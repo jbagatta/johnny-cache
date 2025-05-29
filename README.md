@@ -4,14 +4,20 @@ A distributed locking strategy that provides atomic read-through caching with ex
 
 ## Features
 
-- **Configurable Data Store / Message Broker**: 
+- **Configurable Data Store / Message Broker** 
     - Can use Redis or Nats for distributed locking/caching
     - Can use Redis or Nats as the underlying message broker
-- **Real-time Eventing**: Notifies waiting processes when cached items are ready (or when the build process errored) - supports timeouts
-- **L1 Cache Support**: Optional local in-memory cache with automatic invalidation
-- **Expiry Policies**: Configurable sliding or absolute expiry times
-- **Exactly-Once Processing**: Guarantees that expensive computations are performed exactly once across distributed processes
-- **Type-Safe**: Written in TypeScript with full generic type support
+- **Real-time Eventing**
+    - Notifies waiting processes when cached items are ready (or when the build process errored) 
+    - Supports timeouts
+- **L1 Cache Support**
+    - Optional local in-memory cache with automatic invalidation
+- **Expiry Policies**
+    - Configurable sliding or absolute expiry times
+- **Exactly-Once Processing**
+    - Guarantees that expensive computations are performed exactly once across distributed processes
+- **Strongly-Typed**
+    - Written in TypeScript with full generic type support
 
 ## Architecture
 
@@ -27,10 +33,11 @@ When a process requests a value (via `buildOrRetrieve(key, buildFunc)`), JohnnyC
         - Also updates the local l1, if applicable
     - Emit an event to notify waiting processes to wake up and check the cache
     - Return the value
+    - *If the buildFunc fails, the lock is cleared and errors are emitted to waiting processes instead*
 4. If the lock is not acquired, JohnnyCache will check the lock payload for an existing cached value
     - If the value is found, it is returned directly
     - Otherwise, another process is running the `buildFunc` - the process will wait to be notified of its completion, and then retrieve from the cache
-    - In both cases, JohnnyCache also updates the local l1, if applicable
+    - In both cases, JohnnyCache also updates the local l1 cache, if applicable
 
 ## Usage
 
@@ -84,27 +91,24 @@ const cache = await DistributedDictionaryFactory.create<string, string>(
 ```typescript
 // Build or retrieve a value
 const result = await cache.buildOrRetrieve(
-    "my-key",
-    async () => {
-        // Expensive computation here
-        return "computed value";
-    },
-    5000 // timeout in milliseconds
+    "my-key",   // lock/cache key
+    async () => "Expensive computation value",
+    5000        // timeout in ms
 );
 
 // Until cache expiry, future calls will not run buildFunc
-const sameResult = await cache.buildOrRetrieve("my-key", async () => console.error('buildFunc rerun'), 100);
+const sameResult = await cache.buildOrRetrieve("my-key", async () => {throw new Error()}, 100);
 
 // Get an existing value
-const value = await cache.get("my-key", 1000); // optional timeout
+const value = await cache.get("my-key", 1000); 
 
-// Check key status
-const status = await cache.status("my-key"); // returns KeyStatus.EMPTY, PENDING, or EXISTS
+// Check key status (KeyStatus.EMPTY, PENDING, or EXISTS)
+const status = await cache.status("my-key"); 
 
 // Delete a key
 await cache.delete("my-key");
 
-// Async version with callbacks
+// Using callbacks instead
 cache.asyncBuildOrRetrieve(
     "my-key",
     async () => "computed value",
