@@ -6,7 +6,7 @@ A distributed locking strategy that provides atomic read-through caching with ex
 
 - **Configurable Data Store / Message Broker** 
     - Can use Redis for distributed locking/caching
-        - Nats Jetstream and TypeOrm implementations in progress
+        - Nats Jetstream and ORM Database implementations in progress
     - Can use Redis or Nats Jetstream as the underlying message broker
 - **Real-time Eventing**
     - Notifies waiting processes when cached items are ready (or when the build process errored) 
