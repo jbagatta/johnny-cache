@@ -53,7 +53,7 @@ const redisOptions: RedisConnectionOptions = {
     sentinel: {
         host: "localhost",
         port: 26379,
-        primaryName: "mymaster",
+        primaryName: "primary",
     },
     password: "your-password"
 };
@@ -70,11 +70,11 @@ const cacheOptions: CacheOptions = {
     name: "my-cache",
     expiry: {
         type: ExpiryType.SLIDING,
-        timeMs: 60 * 1000 // 1 minute
+        timeMs: 60 * 1000 
     },
     l1CacheOptions: {
         enabled: true,
-        purgeIntervalSeconds: 600 // 10 minutes
+        purgeIntervalSeconds: 600 
     }
 };
 
@@ -191,7 +191,7 @@ docker compose -f tests/docker-compose.yml up -d
 
 and then run the e2e tests:
 ```
-npm test:e2e
+npm run test:e2e
 ```
 
 ## License
