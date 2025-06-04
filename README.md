@@ -24,20 +24,20 @@ Built on top of [JohnnyLocke](https://github.com/jbagatta/johnny-locke), it prov
 
 Johnny Cache uses distributed locking to coordinate builds across multiple processes. The design relies on a single `key` that serves as both the lock key and the cache key, allowing for atomic operations against a single point of atomicity. As long as all processes use the same key to define identical `buildFunc` operations, efficient exactly-once processing is achieved.
 
-When a process requests a value (via `buildOrRetrieve(key, buildFunc)`), the process reduces to a simple operation using `JohnnyLocke` distributed locking:
+When a client requests a value (via `buildOrRetrieve(key, buildFunc)`), the process reduces to a simple operation using `JohnnyLocke` distributed locking:
 ```typescript
-await this.lock.withLock<V>(key, timeout
-    async (existingValue: V | null) => {
+await this.lock.withLock<T>(key, timeout
+    async (existingValue: T | null) => {
         if (existingValue !== null) {
             return existingValue
         }
             
-        return await buildFunc()
+        return await buildFunc<T>()
     }
 )
 ```
 
-Once the process acquires the lock, it either returns the existing cached value or populates that value using `buldFunc`. JohnnyLocke takes care of everything else!
+Once the process acquires the lock, it either returns the existing cached value or stores that value using the result of `buldFunc`. JohnnyLocke takes care of everything else!
 
 ## Usage
 
