@@ -107,6 +107,17 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
         await expect(() => cache.buildOrRetrieve(key, buildFunc, 2000)).rejects.toThrow()
     })
 
+    test("should honor long timeout", async () => {
+        const key = crypto.randomUUID()
+        const buildFunc = jest.fn().mockImplementation(async () => {
+            await sleep(3000)
+            return "success"
+        })
+
+        const result = await cache.buildOrRetrieve(key, buildFunc, 4000)
+        expect(result).toBe('success')
+    })
+
     test("should allow rebuild after timeout even if build is in progress", async () => {
         const key = crypto.randomUUID()
 
@@ -129,6 +140,7 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
 
         const results = await Promise.all(builds)
 
+        expect(buildFunc2).toHaveBeenCalledTimes(1)
         results.forEach((r) => expect(r).toBe("new build result"))
     })
 })
