@@ -1,28 +1,28 @@
-import { iterator, sleep } from './util'
+import { iterator, natsInit, redisInit, sleep } from './util'
 import { CacheOptions, DistributedDictionary, ExpiryType, KeyStatus } from '../../src/core/types'
 import Redis from 'ioredis'
 import { DistributedDictionaryFactory } from '../../src/factory/distributed-dictionary-factory'
 
-describe("Distributed Dictionary: buildOrRetrieve()", () => {
+describe.each([natsInit, redisInit])("Distributed Dictionary: buildOrRetrieve()", (lockInit) => {
     let cache: DistributedDictionary<string, string>
-    let redis: Redis
+    let close: () => Promise<void>
+
+    const options: CacheOptions = {
+        name: "test-cache",
+        expiry: {
+          type: ExpiryType.SLIDING,
+          timeMs: 1000
+        }
+    }
 
     beforeEach(async () => {
-        const options: CacheOptions = {
-            name: "test-cache",
-            expiry: {
-              type: ExpiryType.SLIDING,
-              timeMs: 1000
-            }
-        }
-    
-        redis = new Redis('redis://localhost:6379')
-        cache = await DistributedDictionaryFactory.create<string, string>(redis, options)
+        const {cache: c1, close: c2} = await lockInit(options)
+        cache = c1
+        close = c2
     })
 
     afterEach(async () => {
-        await cache?.close()
-        await redis.quit()
+        await close()
     })
 
     test("should only build once with concurrent distributed requests", async () => {
@@ -145,26 +145,26 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
     })
 })
 
-describe("Distributed Dictionary: asyncBuildOrRetrieve()", () => {
+describe.each([natsInit, redisInit])("Distributed Dictionary: asyncBuildOrRetrieve()", (lockInit) => {
     let cache: DistributedDictionary<string, string>
-    let redis: Redis
+    let close: () => Promise<void>
+
+    const options: CacheOptions = {
+        name: "test-cache",
+        expiry: {
+          type: ExpiryType.SLIDING,
+          timeMs: 1000
+        }
+    }
 
     beforeEach(async () => {
-        const options: CacheOptions = {
-            name: "test-cache",
-            expiry: {
-              type: ExpiryType.SLIDING,
-              timeMs: 1000
-            }
-        }
-    
-        redis = new Redis('redis://localhost:6379')
-        cache = await DistributedDictionaryFactory.create<string, string>(redis, options)
+        const {cache: c1, close: c2} = await lockInit(options)
+        cache = c1
+        close = c2
     })
 
     afterEach(async () => {
-        await cache?.close()
-        await redis.quit()
+        await close()
     })
 
     test("should call callback with result on success", async () => {
@@ -203,26 +203,26 @@ describe("Distributed Dictionary: asyncBuildOrRetrieve()", () => {
     })
 })
 
-describe("Distributed Dictionary: get()", () => {
+describe.each([natsInit, redisInit])("Distributed Dictionary: get()", (lockInit) => {
     let cache: DistributedDictionary<string, string>
-    let redis: Redis
+    let close: () => Promise<void>
+
+    const options: CacheOptions = {
+        name: "test-cache",
+        expiry: {
+          type: ExpiryType.SLIDING,
+          timeMs: 1000
+        }
+    }
 
     beforeEach(async () => {
-        const options: CacheOptions = {
-            name: "test-cache",
-            expiry: {
-              type: ExpiryType.SLIDING,
-              timeMs: 5 * 1000
-            }
-        }
-    
-        redis = new Redis('redis://localhost:6379')
-        cache = await DistributedDictionaryFactory.create<string, string>(redis, options)
+        const {cache: c1, close: c2} = await lockInit(options)
+        cache = c1
+        close = c2
     })
 
     afterEach(async () => {
-        await cache?.close()
-        await redis.quit()
+        await close()
     })
 
     test("should wait for builds when getting with timeout", async () => {
@@ -270,26 +270,26 @@ describe("Distributed Dictionary: get()", () => {
     })
 })
 
-describe("Distributed Dictionary: status()", () => {
+describe.each([natsInit, redisInit])("Distributed Dictionary: status()", (lockInit) => {
     let cache: DistributedDictionary<string, string>
-    let redis: Redis
+    let close: () => Promise<void>
+
+    const options: CacheOptions = {
+        name: "test-cache",
+        expiry: {
+          type: ExpiryType.SLIDING,
+          timeMs: 1000
+        }
+    }
 
     beforeEach(async () => {
-        const options: CacheOptions = {
-            name: "test-cache",
-            expiry: {
-              type: ExpiryType.SLIDING,
-              timeMs: 5 * 1000
-            }
-        }
-    
-        redis = new Redis('redis://localhost:6379')
-        cache = await DistributedDictionaryFactory.create<string, string>(redis, options)
+        const {cache: c1, close: c2} = await lockInit(options)
+        cache = c1
+        close = c2
     })
 
     afterEach(async () => {
-        await cache?.close()
-        await redis.quit()
+        await close()
     })
 
     test("should return correct status", async () => {
@@ -312,26 +312,26 @@ describe("Distributed Dictionary: status()", () => {
     })
 })
 
-describe("Distributed Dictionary: delete()", () => {
+describe.each([natsInit, redisInit])("Distributed Dictionary: delete()", (lockInit) => {
     let cache: DistributedDictionary<string, string>
-    let redis: Redis
+    let close: () => Promise<void>
+
+    const options: CacheOptions = {
+        name: "test-cache",
+        expiry: {
+          type: ExpiryType.SLIDING,
+          timeMs: 1000
+        }
+    }
 
     beforeEach(async () => {
-        const options: CacheOptions = {
-            name: "test-cache",
-            expiry: {
-              type: ExpiryType.SLIDING,
-              timeMs: 5 * 1000
-            }
-        }
-    
-        redis = new Redis('redis://localhost:6379')
-        cache = await DistributedDictionaryFactory.create<string, string>(redis, options)
+        const {cache: c1, close: c2} = await lockInit(options)
+        cache = c1
+        close = c2
     })
 
     afterEach(async () => {
-        await cache?.close()
-        await redis.quit()
+        await close()
     })
 
     test("should remove key and allow immediate rebuild after delete", async () => {

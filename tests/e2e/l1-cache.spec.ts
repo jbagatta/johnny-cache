@@ -1,32 +1,32 @@
 import NodeCache from "node-cache"
 import { CacheOptions, DistributedDictionary, ExpiryType } from "../../src/core/types"
-import { sleep } from "./util"
+import { natsInit, redisInit, sleep } from "./util"
 import { DistributedDictionaryFactory } from "../../src/factory/distributed-dictionary-factory"
 import Redis from "ioredis"
 
-describe.only("Distributed Dictionary: L1 Cache Behavior", () => {
+describe.each([natsInit, redisInit])("Distributed Dictionary: L1 Cache Behavior", (lockInit) => {
     let l1: NodeCache
     let cache: DistributedDictionary<string, string>
-    let redis: Redis
+    let close: () => Promise<void>
+
+    const options: CacheOptions = {
+        name: "test-cache",
+        expiry: {
+          type: ExpiryType.SLIDING,
+          timeMs: 1000
+        },
+        l1CacheOptions: {enabled: true}
+    }
 
     beforeEach(async () => {
         l1 = new NodeCache()
-        const options: CacheOptions = {
-            name: "test-cache",
-            expiry: {
-              type: ExpiryType.SLIDING,
-              timeMs: 1000
-            },
-            l1CacheOptions: {enabled: true}
-        }
-    
-        redis = new Redis('redis://localhost:6379')
-        cache = await DistributedDictionaryFactory.create<string, string>(redis, options, l1)
+        const {cache: c1, close: c2} = await lockInit(options, l1)
+        cache = c1
+        close = c2
     })
 
     afterEach(async () => {
-        await cache?.close()
-        await redis.quit()
+        await close()
     })
 
     test("should use L1 when exists", async () => {

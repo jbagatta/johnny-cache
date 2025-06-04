@@ -131,8 +131,8 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
             this.l1Cache?.ttl(key, time)
 
             const update = async () => {
-                const lock = await this.lock.acquireLock(key, time)
-                await this.lock.releaseLock(key, lock)
+                const lock = await this.lock.tryAcquireLock(key)
+                if (lock.acquired) await this.lock.releaseLock(key, lock.value!)
             }
             update()
                 .then(() => {})
