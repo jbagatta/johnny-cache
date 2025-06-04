@@ -36,16 +36,15 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
     public asyncBuildOrRetrieve(
         key: K, 
         buildFunc: () => Promise<V>, 
-        timeoutMs: number, 
-        callback: (value: V) => Promise<void>, 
-        error: (err: any) => Promise<void>
+        callback: (value?: V, err?: any) => Promise<void>, 
+        timeoutMs: number
     ): void {
         this.buildOrRetrieve(key, buildFunc, timeoutMs)
             .then(async (result: V) => {
                 await callback(result)
             })
             .catch(async (err) => {
-                await error(err)
+                await callback(undefined, err)
             })
     }
 
@@ -86,6 +85,10 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         if (localValue) { return localValue }
 
         const obj = await this.lock.wait<V>(keyString, timeoutMs)
+        if (obj.value === null) {
+            throw new Error(`Key ${key} does not exist in cache ${this.cacheOptions.name}`)
+        }
+
         this.updateExpiry(keyString)
         this.insertIntoL1Cache(keyString, obj.value!)
 
@@ -104,11 +107,11 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         }
 
         await this.lock.releaseLock(keyString, entry.value!)
-        if (!entry.value) {
+        if (entry.value!.value === null) {
             return KeyStatus.EMPTY
         }
 
-        this.insertIntoL1Cache(keyString, entry.value.value as any)
+        this.insertIntoL1Cache(keyString, entry.value!.value as any)
         return KeyStatus.EXISTS
     }
 
@@ -143,14 +146,19 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         return localValue
     }
 
-    private updateExpiry(namespacedKey: string) {
+    private updateExpiry(key: string) {
         if (this.cacheOptions.expiry?.type === ExpiryType.SLIDING) {
-            this.l1Cache.ttl(namespacedKey, this.cacheOptions.expiry.timeMs * 0.001)
+            const time = this.cacheOptions.expiry.timeMs
+            this.l1Cache.ttl(key, time * 0.001)
 
-            this.lock.resetExpiry(namespacedKey)
+            const update = async () => {
+                const lock = await this.lock.acquireLock(key, time)
+                await this.lock.releaseLock(key, lock)
+            }
+            update()
                 .then(() => {})
                 .catch((err) => {
-                    console.error(`Could not update expiry for key ${namespacedKey} due to: ${err}`)
+                    console.error(`Could not update expiry for key ${key} due to: ${err}`)
                 })
         }
     }

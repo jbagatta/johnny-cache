@@ -29,9 +29,8 @@ export interface DistributedDictionary<K, V> {
     asyncBuildOrRetrieve(
         key: K, 
         buildFunc: () => Promise<V>, 
-        timeoutMs: number, 
-        callback: (value: V) => Promise<void>, 
-        error: (err: any) => Promise<void>
+        callback: (value?: V, err?: any) => Promise<void>, 
+        timeoutMs: number
     ): void
     buildOrRetrieve(
         key: K, 

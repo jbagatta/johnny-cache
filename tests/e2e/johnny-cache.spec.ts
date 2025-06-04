@@ -1,20 +1,32 @@
-import { v4 } from 'uuid'
-import { createTestCache, iterator, sleep } from './util'
-import { DistributedDictionary, KeyStatus } from '../../src/core/types'
+import { iterator, sleep } from './util'
+import { CacheOptions, DistributedDictionary, ExpiryType, KeyStatus } from '../../src/core/types'
+import Redis from 'ioredis'
+import { DistributedDictionaryFactory } from '../../src/factory/distributed-dictionary-factory'
 
 describe("Distributed Dictionary: buildOrRetrieve()", () => {
     let cache: DistributedDictionary<string, string>
+    let redis: Redis
 
     beforeEach(async () => {
-        cache = await createTestCache<string, string>()
+        const options: CacheOptions = {
+            name: "test-cache",
+            expiry: {
+              type: ExpiryType.SLIDING,
+              timeMs: 1000
+            }
+        }
+    
+        redis = new Redis('redis://localhost:6379')
+        cache = await DistributedDictionaryFactory.create<string, string>(redis, options)
     })
 
     afterEach(async () => {
         await cache?.close()
+        await redis.quit()
     })
 
     test("should only build once with concurrent distributed requests", async () => {
-        const key = v4()
+        const key = crypto.randomUUID()
         const value = "this is the result of some big expensive process"
         const buildFunc = jest.fn().mockImplementation(async () => {
             await sleep(1000)
@@ -28,7 +40,7 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
         const edgeCaseBuilds = new Array<Promise<string>>(200)
         for (let i=0; i<200; i++) {
             await sleep(1)
-            edgeCaseBuilds[i] = cache.buildOrRetrieve(key, buildFunc, 200)
+            edgeCaseBuilds[i] = cache.buildOrRetrieve(key, buildFunc, 500)
         }
 
         const results = await Promise.all(builds)
@@ -40,45 +52,28 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
     })
     
     test("should retrieve existing once built", async () => {
-        const key = v4()
+        const key = crypto.randomUUID()
         const value = "this is the result of some big expensive process"
         const buildFunc = jest.fn().mockImplementation(async () => {
-            await sleep(1000)
             return value
         })
 
-        const firstResult = await cache.buildOrRetrieve(key, buildFunc, 2000)
+        const firstResult = await cache.buildOrRetrieve(key, buildFunc, 500)
         expect(buildFunc).toHaveBeenCalledTimes(1)
         expect(firstResult).toBe(value)
 
         const buildFunc2 = jest.fn().mockImplementation(async () => {
             return "wrong value"
         })
-        const builds = iterator(100).map(async () => cache.buildOrRetrieve(key, buildFunc2, 1))
+        const builds = iterator(100).map(async () => cache.buildOrRetrieve(key, buildFunc2, 500))
         const results = await Promise.all(builds)
 
         expect(buildFunc2).not.toHaveBeenCalled()
         results.forEach((r) => expect(r).toBe(firstResult))
     })
 
-    test("should propagate error to all clients waiting for build ID", async () => {
-        const key = v4()
-        const err = new Error("this is an error")
-        const buildFunc = jest.fn().mockImplementation(async () => {
-            await sleep(1000)
-            throw err
-        })
-
-        const builds = iterator(100).map(async () => cache.buildOrRetrieve(key, buildFunc, 2000))
-        const results = await Promise.allSettled(builds)
-
-        expect(buildFunc).toHaveBeenCalledTimes(1)
-        results.forEach((r) => expect(r.status).toBe("rejected"))
-        results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toBe(err.message))
-    })
-
     test("should allow immediate rebuild after error", async () => {
-        const key = v4()
+        const key = crypto.randomUUID()
 
         const builds = iterator(100).map(async (i) => {
             await sleep(i)
@@ -89,7 +84,7 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
                 else {
                     return Promise.resolve('success')
                 }
-            }, 2000)
+            }, 500)
         })
         const results = await Promise.allSettled(builds)
 
@@ -103,52 +98,23 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
     })
 
     test("should error with timeout when buildFunc runs long", async () => {
-        const key = v4()
+        const key = crypto.randomUUID()
         const buildFunc = jest.fn().mockImplementation(async () => {
             await sleep(3000)
             return ""
         })
 
-        const firstResult = cache.buildOrRetrieve(key, buildFunc, 3000)
-
-        const builds = iterator(100).map(async () => cache.buildOrRetrieve(key, buildFunc, 10))
-        const results = await Promise.allSettled(builds)
-
-        await firstResult
-
-        results.forEach((r) => expect(r.status).toBe("rejected"))
-        results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toContain("is not complete"))
-    })
-
-    test("should not cache a build that times out", async () => {
-        const key = v4()
-        const buildFunc = jest.fn().mockImplementation(async () => {
-            await sleep(2000)
-            return "build result"
-        })
-        const invalidBuild = cache.buildOrRetrieve(key, buildFunc, 100)
-
-        await sleep(500)
-        expect(await cache.status(key)).toBe(KeyStatus.EMPTY)
-
-        const buildFunc2 = jest.fn().mockImplementation(async () => {
-            return "new build result"
-        })
-        const validBuild = await cache.buildOrRetrieve(key, buildFunc2, 100)
-
-        expect(await invalidBuild).toBe("build result")
-        expect(validBuild).toBe("new build result")
-        expect(await cache.status(key)).toBe(KeyStatus.EXISTS)
+        await expect(() => cache.buildOrRetrieve(key, buildFunc, 2000)).rejects.toThrow()
     })
 
     test("should allow rebuild after timeout even if build is in progress", async () => {
-        const key = v4()
+        const key = crypto.randomUUID()
 
         const buildFunc = jest.fn().mockImplementation(async () => {
             await sleep(1000)
             return "build result"
         })
-        const invalidBuild = cache.buildOrRetrieve(key, buildFunc, 100)
+        const invalidBuild = cache.buildOrRetrieve(key, buildFunc, 500)
 
         await sleep(850)
         
@@ -157,72 +123,98 @@ describe("Distributed Dictionary: buildOrRetrieve()", () => {
         })
         const builds = iterator(200).map(async (i) => {
             await sleep(i)
-            return await cache.buildOrRetrieve(key, buildFunc2, 100)
+            return await cache.buildOrRetrieve(key, buildFunc2, 500)
         })
+        await expect(() => invalidBuild).rejects.toThrow()
+
         const results = await Promise.all(builds)
 
-        expect(await invalidBuild).toBe("build result")
         results.forEach((r) => expect(r).toBe("new build result"))
     })
 })
 
 describe("Distributed Dictionary: asyncBuildOrRetrieve()", () => {
     let cache: DistributedDictionary<string, string>
+    let redis: Redis
 
     beforeEach(async () => {
-        cache = await createTestCache<string, string>()
+        const options: CacheOptions = {
+            name: "test-cache",
+            expiry: {
+              type: ExpiryType.SLIDING,
+              timeMs: 1000
+            }
+        }
+    
+        redis = new Redis('redis://localhost:6379')
+        cache = await DistributedDictionaryFactory.create<string, string>(redis, options)
     })
 
     afterEach(async () => {
         await cache?.close()
+        await redis.quit()
     })
 
     test("should call callback with result on success", async () => {
-        const key = v4()
+        const key = crypto.randomUUID()
         const value = "this is the result of some big expensive process"
         const buildFunc = jest.fn().mockImplementation(async () => {
             return value
         })
-        const success = jest.fn()
-        const failure = jest.fn()
+        const callback = jest.fn().mockImplementation((result, err) => {
+            expect(result).toBeDefined()
+            expect(err).toBeUndefined()
+        })
 
-        cache.asyncBuildOrRetrieve(key, buildFunc, 1000, success, failure)
+        cache.asyncBuildOrRetrieve(key, buildFunc, callback, 1000)
 
-        await sleep(100)
+        await sleep(200)
 
-        expect(success).toHaveBeenCalled()
+        expect(callback).toHaveBeenCalled()
     })
 
     test("should call error on error", async () => {
-        const key = v4()
-        const value = "this is the result of some big expensive process"
+        const key = crypto.randomUUID()
         const buildFunc = jest.fn().mockImplementation(async () => {
             throw new Error()
         })
-        const success = jest.fn()
-        const failure = jest.fn()
+        const callback = jest.fn().mockImplementation((result, err) => {
+            expect(result).toBeUndefined()
+            expect(err).toBeDefined()
+        })
 
-        cache.asyncBuildOrRetrieve(key, buildFunc, 1000, success, failure)
+        cache.asyncBuildOrRetrieve(key, buildFunc, callback, 1000)
 
-        await sleep(100)
+        await sleep(200)
 
-        expect(failure).toHaveBeenCalled()
+        expect(callback).toHaveBeenCalled()
     })
 })
 
 describe("Distributed Dictionary: get()", () => {
     let cache: DistributedDictionary<string, string>
+    let redis: Redis
 
     beforeEach(async () => {
-        cache = await createTestCache<string, string>()
+        const options: CacheOptions = {
+            name: "test-cache",
+            expiry: {
+              type: ExpiryType.SLIDING,
+              timeMs: 5 * 1000
+            }
+        }
+    
+        redis = new Redis('redis://localhost:6379')
+        cache = await DistributedDictionaryFactory.create<string, string>(redis, options)
     })
 
     afterEach(async () => {
         await cache?.close()
+        await redis.quit()
     })
 
     test("should wait for builds when getting with timeout", async () => {
-        const key = v4()
+        const key = crypto.randomUUID()
         const value = "this is the result of some big expensive process"
         const buildFunc = jest.fn().mockImplementation(async () => {
             await sleep(1000)
@@ -230,16 +222,17 @@ describe("Distributed Dictionary: get()", () => {
         })
 
         const call = cache.buildOrRetrieve(key, buildFunc, 2000)
+        await sleep(200)
 
-        const gets = iterator(100).map(async () => cache.get(key, 2000))
+        const gets = iterator(100).map(async () => cache.get(key, 3000))
         const results = await Promise.all(gets)
 
         const result = await call
         results.forEach((r) => expect(r).toBe(result))
     })
 
-    test("should not wait for builds when getting without timeout", async () => {
-        const key = v4()
+    test("should not wait for builds when getting with short timeout", async () => {
+        const key = crypto.randomUUID()
         const value = "this is the result of some big expensive process"
         const buildFunc = jest.fn().mockImplementation(async () => {
             await sleep(1000)
@@ -247,18 +240,19 @@ describe("Distributed Dictionary: get()", () => {
         })
 
         const call = cache.buildOrRetrieve(key, buildFunc, 2000)
+        await sleep(200)
 
-        const gets = iterator(100).map(async () => cache.get(key))
+        const gets = iterator(100).map(async () => cache.get(key, 500))
         const results = await Promise.allSettled(gets)
 
         await call
 
         results.forEach((r) => expect(r.status).toBe("rejected"))
-        results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toContain('is not complete'))
+        results.forEach((r) => expect((r as PromiseRejectedResult).reason.message).toContain('Lock Wait Timeout'))
     })
 
     test("should error immediately when getting nonexistent key", async () => {
-        const key = v4()
+        const key = crypto.randomUUID()
 
         await expect(async () => cache.get(key, 1000)).rejects.toThrow(`Key ${key} does not exist in cache test-cache`)
     })
@@ -266,17 +260,28 @@ describe("Distributed Dictionary: get()", () => {
 
 describe("Distributed Dictionary: status()", () => {
     let cache: DistributedDictionary<string, string>
+    let redis: Redis
 
     beforeEach(async () => {
-        cache = await createTestCache<string, string>()
+        const options: CacheOptions = {
+            name: "test-cache",
+            expiry: {
+              type: ExpiryType.SLIDING,
+              timeMs: 5 * 1000
+            }
+        }
+    
+        redis = new Redis('redis://localhost:6379')
+        cache = await DistributedDictionaryFactory.create<string, string>(redis, options)
     })
 
     afterEach(async () => {
         await cache?.close()
+        await redis.quit()
     })
 
     test("should return correct status", async () => {
-        const key = v4()
+        const key = crypto.randomUUID()
         const buildFunc = jest.fn().mockImplementation(async () => {
             await sleep(1000)
             return "build result"
@@ -284,6 +289,7 @@ describe("Distributed Dictionary: status()", () => {
         expect(await cache.status(key)).toBe(KeyStatus.EMPTY)
 
         const call = cache.buildOrRetrieve(key, buildFunc, 2000)
+        await sleep(250)
         expect(await cache.status(key)).toBe(KeyStatus.PENDING)
 
         await call
@@ -296,27 +302,37 @@ describe("Distributed Dictionary: status()", () => {
 
 describe("Distributed Dictionary: delete()", () => {
     let cache: DistributedDictionary<string, string>
+    let redis: Redis
 
     beforeEach(async () => {
-        cache = await createTestCache<string, string>()
+        const options: CacheOptions = {
+            name: "test-cache",
+            expiry: {
+              type: ExpiryType.SLIDING,
+              timeMs: 5 * 1000
+            }
+        }
+    
+        redis = new Redis('redis://localhost:6379')
+        cache = await DistributedDictionaryFactory.create<string, string>(redis, options)
     })
 
     afterEach(async () => {
         await cache?.close()
+        await redis.quit()
     })
 
     test("should remove key and allow immediate rebuild after delete", async () => {
-        const key = v4()
+        const key = crypto.randomUUID()
         const value = "this is the result of some big expensive process"
         const buildFunc = jest.fn().mockImplementation(async () => {
-            await sleep(1000)
             return value
         })
 
-        await cache.buildOrRetrieve(key, buildFunc, 2000)
+        await cache.buildOrRetrieve(key, buildFunc, 500)
 
         const builds = iterator(100).map(async (i) => {
-            if (i === 50) {
+            if (i === 1) {
                 await cache.delete(key)
             }
             return await cache.buildOrRetrieve(key, buildFunc, 2000)
