@@ -1,14 +1,12 @@
 import NodeCache from "node-cache"
 import { CacheOptions, DistributedDictionary, ExpiryType, KeyStatus } from "./types"
-import { DataStore } from "../ports/data-store"
-import { BuildResult, MessageBroker } from "../ports/message-broker"
+import { IDistributedLock } from "johnny-locke"
 
 export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
     private l1CacheEnabled = false
 
     constructor(
-        private readonly dataStore: DataStore,
-        private readonly messageBroker: MessageBroker,
+        private readonly lock: IDistributedLock,
         private readonly cacheOptions: CacheOptions,
         private readonly l1Cache: NodeCache 
             = new NodeCache({ 
@@ -17,23 +15,23 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
                 deleteOnExpire: true
             })
     ) { 
-        if (cacheOptions.l1CacheOptions?.enabled ?? false) {
-            this.messageBroker.onKeyDeleted(this.cacheOptions.name, (key: string) => {
-                const handleDelete = () => this.l1Cache.del(key)
-                handleDelete.bind(this)
-                handleDelete()
-            })
-            .then(() => {
-                this.l1CacheEnabled = true
-                console.info("L1 cache enabled")})
-            .catch((err) => {
-                this.l1CacheEnabled = false
-                console.warn(`An error occurred, disabling L1 cache: ${err}`)
-            })
-        }
+        //if (cacheOptions.l1CacheOptions?.enabled ?? false) {
+        //    this.messageBroker.onKeyDeleted(this.cacheOptions.name, (key: string) => {
+        //        const handleDelete = () => this.l1Cache.del(key)
+        //        handleDelete.bind(this)
+        //        handleDelete()
+        //    })
+        //    .then(() => {
+        //        this.l1CacheEnabled = true
+        //        console.info("L1 cache enabled")})
+        //    .catch((err) => {
+        //        this.l1CacheEnabled = false
+        //        console.warn(`An error occurred, disabling L1 cache: ${err}`)
+        //    })
+        //}
     }
 
-    private namespacedKey = (key: K) => `${this.cacheOptions.name}/${key}`
+    private keyString = (key: K) => `${key}`
 
     public asyncBuildOrRetrieve(
         key: K, 
@@ -56,120 +54,70 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         buildFunc: () => Promise<V>, 
         timeoutMs: number
     ): Promise<V> {
-        const namespacedKey = this.namespacedKey(key)
-        const localValue = this.tryGetFromL1Cache(namespacedKey)
+        const keyString = this.keyString(key)
+
+        const localValue = this.tryGetFromL1Cache(keyString)
         if (localValue) { return localValue }
 
-        const buildReservation = await this.dataStore.tryReserve<V>(namespacedKey, timeoutMs)
-        if (buildReservation.isNew) {
-            try {
-                return await this.handleBuild(namespacedKey, buildReservation.buildId, buildFunc)
-            } catch (err) {
-                throw await this.handleError(namespacedKey, buildReservation.buildId, err)
+        let existing = await this.lock.wait<V>(keyString, timeoutMs)
+
+        if (existing.value === null) {
+            existing = await this.lock.withLock<V>(keyString, timeoutMs, async (existingValue: V | null) => {
+            if (existingValue !== null) {
+                return existingValue
             }
-        }
-        else {
-            return await this.handlePendingBuild(namespacedKey, buildReservation.buildId, buildReservation.completedBuild, timeoutMs)
-        }
-    }
-
-    public async status(key: K): Promise<KeyStatus> {
-        const namespacedKey = this.namespacedKey(key)
-        const build = await this.dataStore.get<V>(namespacedKey) 
-        if (build === null) {
-            return KeyStatus.EMPTY
+            
+            return await buildFunc()
+        })
         }
 
-        return await build.completedBuild === null 
-            ? KeyStatus.PENDING 
-            : KeyStatus.EXISTS
+        this.insertIntoL1Cache(keyString, existing.value!)
+
+        return existing.value!
     }
 
     public async get(key: K, timeoutMs?: number): Promise<V> {
-        const namespacedKey = this.namespacedKey(key)
-        const localValue = this.tryGetFromL1Cache(namespacedKey)
+        const keyString = this.keyString(key)
+
+        const localValue = this.tryGetFromL1Cache(keyString)
         if (localValue) { return localValue }
 
-        let build = await this.dataStore.get<V>(namespacedKey)
-        if (build === null) {
-            throw new Error(`Key ${key} does not exist in cache ${this.cacheOptions.name}`)
+        const obj = await this.lock.wait<V>(keyString, timeoutMs ?? 30_000)
+        this.updateExpiry(keyString)
+        this.insertIntoL1Cache(keyString, obj.value!)
+
+        return obj.value!
+    }    
+    
+    public async status(key: K): Promise<KeyStatus> {
+        const keyString = this.keyString(key)
+
+        const localValue = this.tryGetFromL1Cache(keyString)
+        if (localValue) { return KeyStatus.EXISTS }
+
+        const entry = await this.lock.tryAcquireLock(keyString)
+        if (!entry.acquired) {
+            return KeyStatus.PENDING
         }
 
-        return await this.handlePendingBuild(namespacedKey, build.buildId, build.completedBuild, timeoutMs)
+        await this.lock.releaseLock(keyString, entry.value!)
+        if (!entry.value) {
+            return KeyStatus.EMPTY
+        }
+
+        this.insertIntoL1Cache(keyString, entry.value.value as any)
+        return KeyStatus.EXISTS
     }
 
     public async delete(key: K): Promise<void> {
-        const namespacedKey = this.namespacedKey(key)
+        const keyString = this.keyString(key)
 
-        this.l1Cache.del(namespacedKey)
-        await this.dataStore.delete(namespacedKey)
-        await this.messageBroker.publishKeyDeleted(this.cacheOptions.name, namespacedKey as string)
+        this.l1Cache.del(keyString)
+        await this.lock.delete(keyString)
     }
 
     public async close(): Promise<void> {
-        this.dataStore.close()
-        await this.messageBroker.close()
-    }
-
-    private async handleBuild(namespacedKey: string, buildId: string, buildFunc: () => Promise<V>): Promise<V> {
-        const value = await buildFunc()
-    
-        if (await this.dataStore.tryUpdateReservation(namespacedKey, buildId, value, this.cacheOptions.expiry?.timeMs)) {
-            this.insertIntoL1Cache(namespacedKey, value)
-    
-            await this.messageBroker.publishSignal({
-                signalId: buildId,
-                result: BuildResult.COMPLETED
-            })
-        }
-        else {
-            console.warn(`Reservation expired: build ${buildId} for key ${namespacedKey} will be returned but not cached`)
-        }
-    
-        return value
-    }
-
-    private async handleError(namespacedKey: string, buildId: string, err: any): Promise<Error> {
-        const error = err as Error ?? new Error(`An unknown error occurred: ${err}`)
-        console.error(err)
-
-        await this.dataStore.delete(namespacedKey)
-        await this.messageBroker.publishSignal({
-            signalId: buildId,
-            result: BuildResult.FAILED,
-            error: error.message
-        })
-
-        return error
-    }
-
-    private async handlePendingBuild(namespacedKey: string, buildId: string, result: V | null, timeoutMs?: number): Promise<V> {
-        if (result === null && timeoutMs) {
-            await this.waitForBuildCompletion(buildId, timeoutMs) 
-
-            const completedBuild = await this.dataStore.get<V>(namespacedKey)
-
-            result = completedBuild?.completedBuild ?? null
-        }
-        if (!result) {
-            throw new Error(`Build ${buildId} is not complete, or ${namespacedKey} was deleted`)
-        } 
-
-        this.insertIntoL1Cache(namespacedKey, result)
-        this.updateExpiry(namespacedKey)
-            
-        return result
-    }
-
-    private async waitForBuildCompletion(buildId: string, timeoutMs: number): Promise<void> {
-        const signal = await this.messageBroker.waitForSignal(buildId, timeoutMs)
-
-        if (signal.result === BuildResult.FAILED) {
-            throw new Error(signal.error)
-        }
-        if (signal.result === BuildResult.TIMEOUT) {
-            console.warn(`A timeout occurred waiting for build ${buildId} to complete`)
-        }
+        this.lock.close()
     }
 
     private insertIntoL1Cache(key: string, value: V): void {
@@ -196,7 +144,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         if (this.cacheOptions.expiry?.type === ExpiryType.SLIDING) {
             this.l1Cache.ttl(namespacedKey, this.cacheOptions.expiry.timeMs * 0.001)
 
-            this.dataStore.updateExpiry(namespacedKey, this.cacheOptions.expiry?.timeMs)
+            this.lock.resetExpiry(namespacedKey)
                 .then(() => {})
                 .catch((err) => {
                     console.error(`Could not update expiry for key ${namespacedKey} due to: ${err}`)

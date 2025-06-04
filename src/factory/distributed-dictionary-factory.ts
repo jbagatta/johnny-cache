@@ -2,40 +2,26 @@
 import NodeCache from "node-cache";
 import { CacheOptions, DistributedDictionary } from "../core/types";
 import { JohnnyCache } from "../core/johnny-cache";
-import { DataStore } from "../ports/data-store";
-import { MessageBroker } from "../ports/message-broker";
-import { NatsConnectionOptions, createJetstreamMessageBroker } from "../adapters/message-brokers/jetstream-message-broker";
-import { RedisConnectionOptions, createRedisDataStore } from "../adapters/data-stores/redis-data-store";
-import { createRedisMessageBroker } from "../adapters/message-brokers/redis-message-broker";
+import { NatsConnection } from "nats";
+import Redis from "ioredis";
+import { JetstreamDistributedLock, LockConfiguration, RedisDistributedLock } from "johnny-locke";
 
 export class DistributedDictionaryFactory {
-    public static async createCustom<K, V>(
-        dataStore: DataStore,
-        messageBroker: MessageBroker,
-        cacheOptions: CacheOptions,
-        l1Cache?: NodeCache
-    ): Promise<DistributedDictionary<K, V>> {
-        return new JohnnyCache<K, V>(dataStore, messageBroker, cacheOptions, l1Cache)
-    }
-
     public static async create<K, V>(
-        dataStoreConnectionOptions: RedisConnectionOptions,
-        messageBrokerConnectionOptions: NatsConnectionOptions | RedisConnectionOptions, 
+        client: NatsConnection | Redis,
         cacheOptions: CacheOptions,
         l1Cache?: NodeCache
     ): Promise<DistributedDictionary<K, V>> {
-        let messageBroker: MessageBroker
-        if (messageBrokerConnectionOptions instanceof NatsConnectionOptions) {
-            messageBroker = await createJetstreamMessageBroker(messageBrokerConnectionOptions)
+        const config: LockConfiguration = {
+            namespace: cacheOptions.name,
+            lockTimeoutMs: cacheOptions.expiry?.timeMs ?? 30_000,
+            objectExpiryMs: cacheOptions.expiry?.timeMs
         }
-        else {
-            messageBroker = createRedisMessageBroker(messageBrokerConnectionOptions)
-        }
-        
-        const dataStore = createRedisDataStore(dataStoreConnectionOptions)
 
-        return await this.createCustom<K, V>(dataStore, messageBroker, cacheOptions, l1Cache)
+        const lock = (client instanceof Redis)
+            ? await RedisDistributedLock.create(client, config)
+            : await JetstreamDistributedLock.create(client, config)
+        
+        return new JohnnyCache<K, V>(lock, cacheOptions, l1Cache)
     }
 }
-
-export {RedisConnectionOptions, NatsConnectionOptions}
