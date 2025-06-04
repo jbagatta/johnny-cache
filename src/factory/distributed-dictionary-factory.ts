@@ -5,6 +5,9 @@ import { JohnnyCache } from "../core/johnny-cache";
 import { NatsConnection } from "nats";
 import Redis from "ioredis";
 import { JetstreamDistributedLock, LockConfiguration, RedisDistributedLock } from "johnny-locke";
+import { RedisL1CacheManager } from "../core/l1-cache/redis-l1-cache-manager";
+import { NatsL1CacheManager } from "../core/l1-cache/nats-l1-cache-manager";
+import { L1CacheManager } from "../core/l1-cache/l1-cache-manager";
 
 export class DistributedDictionaryFactory {
     public static async create<K, V>(
@@ -21,7 +24,20 @@ export class DistributedDictionaryFactory {
         const lock = (client instanceof Redis)
             ? await RedisDistributedLock.create(client, config)
             : await JetstreamDistributedLock.create(client, config)
+            
+        let cacheManager: L1CacheManager | undefined
+        if (cacheOptions.l1CacheOptions?.enabled === true) {
+            const l1 = l1Cache ?? new NodeCache({ 
+                checkperiod: cacheOptions.l1CacheOptions?.purgeIntervalSeconds ?? 10,
+                errorOnMissing: false,
+                deleteOnExpire: true
+            })
+
+            cacheManager = (client instanceof Redis)
+                ? new RedisL1CacheManager(client, config.namespace, l1)
+                : new NatsL1CacheManager(client, config.namespace, l1)
+        }
         
-        return new JohnnyCache<K, V>(lock, cacheOptions, l1Cache)
+        return new JohnnyCache<K, V>(lock, cacheOptions, cacheManager)
     }
 }

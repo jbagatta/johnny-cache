@@ -1,35 +1,13 @@
-import NodeCache from "node-cache"
 import { CacheOptions, DistributedDictionary, ExpiryType, KeyStatus } from "./types"
 import { IDistributedLock } from "johnny-locke"
+import { L1CacheManager } from "./l1-cache/l1-cache-manager"
 
 export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
-    private l1CacheEnabled = false
-
     constructor(
         private readonly lock: IDistributedLock,
         private readonly cacheOptions: CacheOptions,
-        private readonly l1Cache: NodeCache 
-            = new NodeCache({ 
-                checkperiod: cacheOptions.l1CacheOptions?.purgeIntervalSeconds,
-                errorOnMissing: false,
-                deleteOnExpire: true
-            })
-    ) { 
-        //if (cacheOptions.l1CacheOptions?.enabled ?? false) {
-        //    this.messageBroker.onKeyDeleted(this.cacheOptions.name, (key: string) => {
-        //        const handleDelete = () => this.l1Cache.del(key)
-        //        handleDelete.bind(this)
-        //        handleDelete()
-        //    })
-        //    .then(() => {
-        //        this.l1CacheEnabled = true
-        //        console.info("L1 cache enabled")})
-        //    .catch((err) => {
-        //        this.l1CacheEnabled = false
-        //        console.warn(`An error occurred, disabling L1 cache: ${err}`)
-        //    })
-        //}
-    }
+        private readonly l1Cache?: L1CacheManager 
+    ) { }
 
     private keyString = (key: K) => `${key}`
 
@@ -118,16 +96,17 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
     public async delete(key: K): Promise<void> {
         const keyString = this.keyString(key)
 
-        this.l1Cache.del(keyString)
+        this.l1Cache?.delete(keyString)
         await this.lock.delete(keyString)
     }
 
     public async close(): Promise<void> {
+        this.l1Cache?.close()
         this.lock.close()
     }
 
     private insertIntoL1Cache(key: string, value: V): void {
-        if (this.l1CacheEnabled) {
+        if (this.l1Cache) {
             if (this.cacheOptions.expiry) {
                 this.l1Cache.set(key, value, this.cacheOptions.expiry.timeMs * 0.001)
             }
@@ -137,11 +116,11 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         }
     }
 
-    private tryGetFromL1Cache(namespacedKey: string): V | null {
-        const localValue = this.l1Cache.get<V>(namespacedKey)
+    private tryGetFromL1Cache(key: string): V | null {
+        const localValue = this.l1Cache?.get<V>(key)
         if (!localValue) { return null }
 
-        this.updateExpiry(namespacedKey)
+        this.updateExpiry(key)
 
         return localValue
     }
@@ -149,7 +128,7 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
     private updateExpiry(key: string) {
         if (this.cacheOptions.expiry?.type === ExpiryType.SLIDING) {
             const time = this.cacheOptions.expiry.timeMs
-            this.l1Cache.ttl(key, time * 0.001)
+            this.l1Cache?.ttl(key, time)
 
             const update = async () => {
                 const lock = await this.lock.acquireLock(key, time)
