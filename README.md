@@ -1,15 +1,15 @@
 # Johnny Cache
 
-A distributed locking strategy that provides atomic read-through caching with exactly-once processing guarantees, as well as realtime eventing. Designed for coordinating expensive or long-running computations in a distributed environment, where redundant processing would be costly and/or unsafe.
+A distributed caching that provides atomic read-through caching with exactly-once processing guarantees, as well as realtime eventing. Designed for coordinating expensive or long-running computations in a distributed environment, where redundant processing would be costly and/or unsafe.
+
+Built on top of [JohnnyLocke](https://github.com/jbagatta/johnny-locke), it provides similar behavior to .Net's ConcurrentDictionary, but in a distributed environment.
 
 ## Features
 
-- **Configurable Data Store / Message Broker** 
-    - Can use Redis for distributed locking/caching
-        - Nats Jetstream and ORM Database implementations in progress
-    - Can use Redis or Nats Jetstream as the underlying message broker
+- **Configurable Backend**
+    - Supports both Redis and Nats under the hood
 - **Real-time Eventing**
-    - Notifies waiting processes when cached items are ready (or when the build process errored) 
+    - Notifies waiting processes when cached items are ready (or when to delete keys from l1)
     - Supports timeouts
 - **L1 Cache Support**
     - Optional local in-memory cache with automatic invalidation
@@ -24,21 +24,20 @@ A distributed locking strategy that provides atomic read-through caching with ex
 
 Johnny Cache uses distributed locking to coordinate builds across multiple processes. The design relies on a single `key` that serves as both the lock key and the cache key, allowing for atomic operations against a single point of atomicity. As long as all processes use the same key to define identical `buildFunc` operations, efficient exactly-once processing is achieved.
 
-When a process requests a value (via `buildOrRetrieve(key, buildFunc)`), JohnnyCache will:
-1. Check the local L1 cache for an existing value (if enabled)
-    - Return this value if found
-2. Attempt to acquire the distributed lock for `key` via the data store
-3. If the lock is acquired, the acquiring process will:
-    - Run the `buildFunc`
-    - Update the cache with the result (which lives atomically with the lock key itself)
-        - Also updates the local l1, if applicable
-    - Emit an event to notify waiting processes to wake up and check the cache
-    - Return the value
-    - *If the buildFunc fails, the lock is cleared and errors are emitted to waiting processes instead*
-4. If the lock is not acquired, JohnnyCache will check the lock payload for an existing cached value
-    - If the value is found, it is returned directly
-    - Otherwise, another process is running the `buildFunc` - the process will wait to be notified of its completion, and then retrieve from the cache
-    - In both cases, JohnnyCache also updates the local l1 cache, if applicable
+When a process requests a value (via `buildOrRetrieve(key, buildFunc)`), the process reduces to a simple operation using `JohnnyLocke` distributed locking:
+```typescript
+await this.lock.withLock<V>(key, timeout
+    async (existingValue: V | null) => {
+        if (existingValue !== null) {
+            return existingValue
+        }
+            
+        return await buildFunc()
+    }
+)
+```
+
+Once the process acquires the lock, it either returns the existing cached value or populates that value using `buldFunc`. JohnnyLocke takes care of everything else!
 
 ## Usage
 
@@ -46,25 +45,6 @@ When a process requests a value (via `buildOrRetrieve(key, buildFunc)`), JohnnyC
 
 ```typescript
 import { DistributedDictionaryFactory, CacheOptions, ExpiryType } from 'johnny-cache';
-import { RedisConnectionOptions } from 'johnny-cache';
-import { NatsConnectionOptions } from 'johnny-cache';
-
-// Configure Redis for data store
-const redisOptions: RedisConnectionOptions = {
-    sentinel: {
-        host: "localhost",
-        port: 26379,
-        primaryName: "primary",
-    },
-    password: "your-password"
-};
-
-// Configure NATS JetStream for message broker
-const natsOptions: NatsConnectionOptions = {
-    urls: ["nats://localhost:4222"],
-    token: "your-token",
-    stream: "jc"
-};
 
 // Configure cache options
 const cacheOptions: CacheOptions = {
@@ -75,16 +55,16 @@ const cacheOptions: CacheOptions = {
     },
     l1CacheOptions: {
         enabled: true,
-        purgeIntervalSeconds: 600 
+        purgeIntervalSeconds: 60
     }
 };
 
+// use redis or nats
+const redis = new Redis('redis://localhost:6379')
+//const nats = await connect({servers: ['nats://localhost:4222']})
+
 // Create cache instance
-const cache = await DistributedDictionaryFactory.create<string, string>(
-    redisOptions,
-    natsOptions,
-    cacheOptions
-);
+const cache = await DistributedDictionaryFactory.create<string, string>(redis, cacheOptions);
 ```
 
 ### Basic Operations
@@ -113,9 +93,8 @@ await cache.delete("my-key");
 cache.asyncBuildOrRetrieve(
     "my-key",
     async () => "computed value",
-    5000,
-    async (value) => console.log("Success:", value),
-    async (error) => console.error("Error:", error)
+    async (value, err) => console.log("Success:", value, err),
+    5000
 );
 
 // Cleanup
@@ -144,11 +123,13 @@ interface CacheOptions {
 
 ### L1 Cache
 
-L1 caching is provided using `NodeCache`. The L1 cache provides a local in-memory cache layer that can significantly improve performance for frequently accessed items. When enabled:
+L1 caching is provided using `NodeCache`. The L1 cache provides a local in-memory cache layer that can significantly improve performance for frequently accessed items. 
 
-- Values are stored locally after first retrieval
-- Cache is automatically invalidated when keys are deleted
-- Supports both sliding and absolute expiry times
+When l1 caching is enabled:
+- Values are stored in local memory after first retrieval
+- All connected caches automatically invalidated when keys are deleted
+    - Eventing to other processes provided via Nats or Redis
+- Supports both sliding and absolute expiry times, synchronized to the configured values
 - Configurable purge interval for expired items
 
 ### Expiry Types
@@ -156,32 +137,7 @@ L1 caching is provided using `NodeCache`. The L1 cache provides a local in-memor
 - **Sliding**: Expiry time resets on each access
 - **Absolute**: Expiry time is fixed from when the value is first cached
 
-### Error Handling
-
-The cache provides robust error handling:
-
-- Build function errors are propagated to all waiting processes
-- Timeout errors are handled gracefully
-- Failed builds can be retried
-
-## Best Practices
-
-1. **Timeout Configuration**
-   - Set appropriate timeouts for your `buildOrRetrieve` calls
-   - Consider the expected duration of your expensive computations
-   - Account for network latency in distributed environments
-2. **L1 Cache Usage**
-   - Enable L1 cache for frequently accessed items
-3. **Error Handling**
-   - Always implement error callbacks for async operations
-   - Handle timeout scenarios appropriately
-   - Implement retry logic for transient failures
-
 ## Running Tests
-
-### Unit Tests
-
-Run `npm test`
 
 ### E2E Tests
 
@@ -190,9 +146,9 @@ Spin up a test environment with redis and nats servers using docker compose:
 docker compose -f tests/docker-compose.yml up -d
 ```
 
-and then run the e2e tests:
+and then run the tests:
 ```
-npm run test:e2e
+npm run test
 ```
 
 ## License
