@@ -4,7 +4,7 @@ import { CacheOptions, DistributedDictionary } from "../core/types";
 import { JohnnyCache } from "../core/johnny-cache";
 import { NatsConnection } from "nats";
 import Redis from "ioredis";
-import { JetstreamDistributedLock, LockConfiguration, RedisDistributedLock } from "johnny-locke";
+import { JetstreamDistributedLock, LockConfiguration, RedisDistributedLock } from "@jbagatta/johnny-locke";
 import { RedisL1CacheManager } from "../core/l1-cache/redis-l1-cache-manager";
 import { NatsL1CacheManager } from "../core/l1-cache/nats-l1-cache-manager";
 import { L1CacheManager } from "../core/l1-cache/l1-cache-manager";

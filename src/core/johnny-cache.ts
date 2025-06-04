@@ -1,6 +1,6 @@
 import { CacheOptions, DistributedDictionary, ExpiryType, KeyStatus } from "./types"
-import { IDistributedLock } from "johnny-locke"
 import { L1CacheManager } from "./l1-cache/l1-cache-manager"
+import { IDistributedLock } from "@jbagatta/johnny-locke"
 
 export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
     constructor(
