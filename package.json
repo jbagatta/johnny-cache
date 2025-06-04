@@ -1,5 +1,5 @@
 {
-  "name": "johnny-cache",
+  "name": "@jbagatta/johnny-cache",
   "version": "1.0.0",
   "description": "A robust distributed dictionary for coordinating and caching expensive operations in a distributed environment",
   "author": "John Bagatta",
@@ -27,5 +27,16 @@
     "ts-jest": "^29.3.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "johnny-cache",
+    "johnny-locke",
+    "nats",
+    "jetstream",
+    "redis",
+    "distributed-cache"
+  ]
 }
