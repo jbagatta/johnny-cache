@@ -14,7 +14,7 @@ export class DistributedDictionaryFactory {
     ): Promise<DistributedDictionary<K, V>> {
         const config: LockConfiguration = {
             namespace: cacheOptions.name,
-            lockTimeoutMs: cacheOptions.expiry?.timeMs ?? 30_000,
+            defaultLockDurationMs: cacheOptions.expiry?.timeMs ?? 30_000,
             objectExpiryMs: cacheOptions.expiry?.timeMs
         }
 

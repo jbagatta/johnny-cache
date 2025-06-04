@@ -60,15 +60,18 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         if (localValue) { return localValue }
 
         let existing = await this.lock.wait<V>(keyString, timeoutMs)
-
         if (existing.value === null) {
-            existing = await this.lock.withLock<V>(keyString, timeoutMs, async (existingValue: V | null) => {
-            if (existingValue !== null) {
-                return existingValue
-            }
+            existing = await this.lock.withLock<V>(
+                keyString, 
+                timeoutMs, 
+                async (existingValue: V | null) => {
+                    if (existingValue !== null) {
+                        return existingValue
+                    }
             
-            return await buildFunc()
-        })
+                    return await buildFunc()
+                },
+                timeoutMs)
         }
 
         this.insertIntoL1Cache(keyString, existing.value!)
@@ -76,13 +79,13 @@ export class JohnnyCache<K, V> implements DistributedDictionary<K, V> {
         return existing.value!
     }
 
-    public async get(key: K, timeoutMs?: number): Promise<V> {
+    public async get(key: K, timeoutMs: number): Promise<V> {
         const keyString = this.keyString(key)
 
         const localValue = this.tryGetFromL1Cache(keyString)
         if (localValue) { return localValue }
 
-        const obj = await this.lock.wait<V>(keyString, timeoutMs ?? 30_000)
+        const obj = await this.lock.wait<V>(keyString, timeoutMs)
         this.updateExpiry(keyString)
         this.insertIntoL1Cache(keyString, obj.value!)
 
