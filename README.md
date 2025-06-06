@@ -2,7 +2,7 @@
 
 A distributed caching that provides atomic read-through caching with exactly-once processing guarantees, as well as realtime eventing. Designed for coordinating expensive or long-running computations in a distributed environment, where redundant processing would be costly and/or unsafe.
 
-Built on top of [JohnnyLocke](https://github.com/jbagatta/johnny-locke), it provides similar behavior to .Net's ConcurrentDictionary, but in a distributed environment.
+Built on top of [JohnnyLocke](https://github.com/jbagatta/johnny-locke), it provides similar syntax and behavior to [.NET ConcurrentDictionary](https://learn.microsoft.com/en-us/dotnet/api/system.collections.concurrent.concurrentdictionary-2?view=net-9.0), but in a distributed environment.
 
 ## Features
 
@@ -37,7 +37,7 @@ await this.lock.withLock<T>(key, timeout
 )
 ```
 
-Once the process acquires the lock, it either returns the existing cached value or stores that value using the result of `buldFunc`. JohnnyLocke takes care of everything else!
+Once the process acquires the lock, it either returns the existing cached value or stores that value using the result of `buldFunc`. `JohnnyLocke` takes care of everything else!
 
 ## Usage
 
@@ -128,20 +128,18 @@ L1 caching is provided using `NodeCache`. The L1 cache provides a local in-memor
 When l1 caching is enabled:
 - Values are stored in local memory after first retrieval
 - All connected caches automatically invalidated when keys are deleted
-    - Eventing to other processes provided via Nats or Redis
+    - Eventing to other processes provided via Core Nats or Redis Pubsub
 - Supports both sliding and absolute expiry times, synchronized to the configured values
 - Configurable purge interval for expired items
 
 ### Expiry Types
 
 - **Sliding**: Expiry time resets on each access
-- **Absolute**: Expiry time is fixed from when the value is first cached
+- **Absolute**: Expiry time is fixed from when the value is first created
 
 ## Running Tests
 
-### E2E Tests
-
-Spin up a test environment with redis and nats servers using docker compose:
+Spin up a test environment with Redis and Nats servers using docker compose:
 ```
 docker compose -f tests/docker-compose.yml up -d
 ```
